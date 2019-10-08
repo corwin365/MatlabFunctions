@@ -1,0 +1,9 @@
+function Indices = georange(Lat,Lon,LatBox,LonBox)
+
+  Indices = find(Lat >= LatBox(1) ...
+               & Lat <= LatBox(2) ...
+               & Lon >= LonBox(1) ...
+               & Lon <= LonBox(2));
+
+end
+
