@@ -235,18 +235,34 @@ try
   
   %PreSmooth must be a three-element vector, with all values odd
   CheckSmooth = @(x) validateattributes(x,{'numeric'},{'size',[1,3],'nonnegative','integer','odd'});
-  addParameter(p,'PreSmooth',[1,1,1],CheckSmooth); %assume 3x3 smoothing in horizontal plane, none in vertical.
+  addParameter(p,'PreSmooth',[1,1,1],CheckSmooth); %assume no smoothing.
   
   %DetrendMethod must be either 1 or 2
   CheckDetrendMethod = @(x) validateattributes(x,{'numeric'},{'>=',1,'<=',2});
   addParameter(p,'DetrendMethod',2,CheckDetrendMethod);  %assumes fast method   
 
+  %do we have the right day?
+  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%  
+  
+  %if granuleId is outside the legit range (-1-240), then add or subtract
+  %days as appropriate
+  if GranuleId < 1 | GranuleId > 240;
+    DayShift  = GranuleId./240;
+    Sign      = DayShift./abs(DayShift);
+    if Sign <= 0; DayShift = -ceil(abs(DayShift));
+    else          DayShift = floor(DayShift);
+    end
+    DateNum   = DateNum + DayShift;
+    GranuleId = mod(GranuleId,240) ;   
+  end
   
   %parse the inputs, and tidy up
   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
   
   parse(p,DateNum,GranuleId,varargin{:})
   clear CheckNT CheckdT CheckSmooth ExpectedInterpolants CheckDetrendMethod
+  
+
   
   %pull out the contents into struct "Inputs", used throughout rest of routine
   Input = p.Results;
