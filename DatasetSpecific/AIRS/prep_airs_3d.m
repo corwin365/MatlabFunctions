@@ -323,9 +323,9 @@ if numel(fieldnames(Input.InputStruct)) == 0;
   
   
 else
-  
+
   %test the validity of the structure, and use it is valid
-  if Input.NoISCheck == 0;
+%   if Input.NoISCheck == 0;
     [Airs,Check.Error,Check.ErrorInfo] = check_input_struct(Input);
     
     if Check.Error ~= 0;
@@ -334,9 +334,9 @@ else
       ErrorInfo = Check.ErrorInfo;
       return
     end
-  else
-    Airs = Input.InputStruct; %BE CAREFUL!!
-  end
+%   else
+%     Airs = Input.InputStruct; %BE CAREFUL!!
+%   end
   
   %all fine - tidy up and continue
   Input = rmfield(Input,'InputStruct');
@@ -370,19 +370,19 @@ end
 %% regularise the data
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-try
+% try
   %flip the temp array around into the order XT x AT x z
   Airs.ret_temp = permute(Airs.ret_temp,[2,3,1]);
   
   %regularise and find spacing
   [Airs,Spacing] = regularise_airs(Airs,[Input.NXT,Input.NAT],Input.Interpolant,Input.Extrapolant,Input.ZSpacing);
 
-
-catch
-  Error = 1;
-  ErrorInfo = 'Problem regularising data';
-  return
-end
+% 
+% catch
+%   Error = 1;
+%   ErrorInfo = 'Problem regularising data';
+%   return
+% end
 
 
 
@@ -586,6 +586,7 @@ return
 
 function  [Airs,Spacing] = regularise_airs(Airs,Spacing,Interpolant,Extrapolant,ZSpacing);
 
+
 %rename vars to save typing
 Lon  = Airs.l1_lon;
 Lat  = Airs.l1_lat;
@@ -593,8 +594,8 @@ Time = Airs.l1_time;
 T    = Airs.ret_temp;
 
 %canonical granule size (km)
-AlongTrackSize = 2450;
-AcrossTrackSize = 1800;
+AlongTrackSize =  2450;
+AcrossTrackSize = 1650;
 
 %define a new grid relative to granule bottom left
 dXT = Spacing(1);

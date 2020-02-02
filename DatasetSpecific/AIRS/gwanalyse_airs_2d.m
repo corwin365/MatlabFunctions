@@ -58,6 +58,7 @@ function [ST,Airs,Error,ErrorInfo] = gwanalyse_airs_2d(Airs,Height,varargin)
 %    c               (array,      [0.25,0.25])  s-transform c parameter
 %    MinWaveLength   (array,            [0,0])  minimum output wavelength
 %    MaxWaveLength   (array,     [1,1].*99e99)  maximum output wavelength
+%    FullST          (logical,          false)  compute full S-Transform. OVERRIDES MANY OTHER SETTINGS, USE WITH CAUTION
 %
 %
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -101,6 +102,10 @@ addParameter(p,'c',[0.25,0.25],CheckSpacing);  %default values
 
 %HeightScaling is logical
 addParameter(p,'HeightScaling',true,@islogical);  %assumes we want to scale the data with height for STing (put back afterwards)
+
+%FullST is logical
+addParameter(p,'FullST',false,@islogical);  %assumes we're happy with the single largest mode in each pixel
+
 
 %MaxWaveLength must be an positive real number
 CheckLambda = @(x) validateattributes(x,{'numeric'},{'>=',0});
@@ -193,14 +198,28 @@ end
 %% do ST
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-
 % do the ST
-ST = nph_ndst(Airs.Tp,                                ...
-              Input.NScales,                          ...
-              PointSpacing,                           ...
-              Input.c,                                ...
-              'maxwavelengths', Input.MaxWaveLength , ...
-              'minwavelengths', Input.MinWaveLength);
+if Input.FullST ~= 1;
+  ST = nph_ndst(Airs.Tp,                                ...
+                Input.NScales,                          ...
+                PointSpacing,                           ...
+                Input.c,                                ...
+                'maxwavelengths', Input.MaxWaveLength , ...
+                'minwavelengths', Input.MinWaveLength);
+else
+
+  %cannot use automatic scales. set some sensible ones, if we haven't
+  %specified them already (which is not currently an option)  
+  Scales{1} = -15:1:15;
+  Scales{2} = Scales{1};
+  
+  ST = nph_ndst(Airs.Tp,                                ...
+                Scales,                                 ...
+                PointSpacing,                           ...
+                Input.c,                                ...
+                'full');
+end              
+              
 clear PointSpacing
 
 
