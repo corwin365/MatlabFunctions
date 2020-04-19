@@ -86,11 +86,10 @@ function [Airs,Spacing,Error,ErrorInfo,MinorErrorInfo] = prep_airs_3d(DateNum,Gr
 %    DayNightFlag  (logical, false)  compute day/night flags.
 %    KeepOldTime   (logical, false)  keep copy of AIRS time in original format.
 %    Interpolant   (string, linear)  type of 2D interpolant to use for regridding AIRS.
-%    Extrapolant   (string, linear)  type of 2D extrapolant to use for regridding AIRS.
+%    Extrapolant   (string,   none)  type of 2D extrapolant to use for regridding AIRS.
 %    PreSmooth     (array, [1,1,1])  size of boxcar smoother to pre-apply to the data (after interp, before detrend).
 %    DetrendMethod (numeric,     2)  detrending method to use (2 is faster)
 %    LoadOnly      (logical, false)  load and return data only
-%    ZSpacing      (numeric,   NaN)  vertical spacing to interpolate to
 %    NoISCheck     (logical, false)  don't check the validity of an input structure (useful eg for merged multiple granules where the size is wrong)
 %    Python        (logical, false)  Python can't handle recursive structs - if called from there, then remove the MetaData field
 %
@@ -204,10 +203,7 @@ try
   CheckNT = @(x) validateattributes(x,{'numeric'},{'nonnegative','integer'});  
   addParameter(p,'NXT', 90,CheckNT);  %assume 90 XT rows unless specified  
   addParameter(p,'NAT',135,CheckNT);  %assume 135 AT rows unless specified  
-  
-  %ZSpacing should be a positive integer  
-  addParameter(p,'ZSpacing',NaN,CheckNT); %same logic as above, NaN means only use 2D interp
-  
+   
   %dXT must be positive 
   CheckdT = @(x) validateattributes(x,{'numeric'},{'nonnegative'});
   addParameter(p,'dXT',NaN,CheckdT);  %assume we're using NXT instead by default
@@ -227,8 +223,8 @@ try
   addParameter(p,'Interpolant','linear',@(x) any(validatestring(x,ExpectedInterpolants)));  %assumes linear
   
   %Interpolant must be a string from the approved list
-  ExpectedExtrapolants = {'linear','nearest'};
-  addParameter(p,'Extrapolant','linear',@(x) any(validatestring(x,ExpectedExtrapolants)));  %assumes linear  
+  ExpectedExtrapolants = {'linear','nearest','none'};
+  addParameter(p,'Extrapolant','none',@(x) any(validatestring(x,ExpectedExtrapolants)));  %assumes linear  
   
   %InputStruct must be a struct. Validation of contents done later...
   addParameter(p,'InputStruct',struct(),@isstruct);
@@ -246,11 +242,11 @@ try
   
   %if granuleId is outside the legit range (-1-240), then add or subtract
   %days as appropriate
-  if GranuleId < 1 | GranuleId > 240;
+  if GranuleId < 1 || GranuleId > 240;
     DayShift  = GranuleId./240;
-    Sign      = DayShift./abs(DayShift);
+    Sign      = DayShift/abs(DayShift);
     if Sign <= 0; DayShift = -ceil(abs(DayShift));
-    else          DayShift = floor(DayShift);
+    else;         DayShift = floor(DayShift);
     end
     DateNum   = DateNum + DayShift;
     GranuleId = mod(GranuleId,240) ;   
@@ -370,20 +366,18 @@ end
 %% regularise the data
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-% try
+try
   %flip the temp array around into the order XT x AT x z
   Airs.ret_temp = permute(Airs.ret_temp,[2,3,1]);
   
   %regularise and find spacing
-  [Airs,Spacing] = regularise_airs(Airs,[Input.NXT,Input.NAT],Input.Interpolant,Input.Extrapolant,Input.ZSpacing);
+  [Airs,Spacing] = regularise_airs(Airs,[Input.NXT,Input.NAT],Input.Interpolant,Input.Extrapolant);
 
-% 
-% catch
-%   Error = 1;
-%   ErrorInfo = 'Problem regularising data';
-%   return
-% end
-
+catch
+  Error = 1;
+  ErrorInfo = 'Problem regularising data';
+  return
+end
 
 
 
@@ -584,7 +578,7 @@ return
 % expect t to be XTxAT or XTxATxZ
 
 
-function  [Airs,Spacing] = regularise_airs(Airs,Spacing,Interpolant,Extrapolant,ZSpacing);
+function  [Airs,Spacing] = regularise_airs(Airs,Spacing,Interpolant,Extrapolant);
 
 
 %rename vars to save typing
@@ -593,13 +587,18 @@ Lat  = Airs.l1_lat;
 Time = Airs.l1_time;
 T    = Airs.ret_temp;
 
-%canonical granule size (km)
-AlongTrackSize =  2450;
-AcrossTrackSize = 1650;
+%find granule size. use mean of all rows/cols, as there are slight variations between them
+AlongTrackSize  = min(nph_haversine([Airs.l1_lat(:,  1),Airs.l1_lon(  :,1)], ...
+                                     [Airs.l1_lat(:,end),Airs.l1_lon(:,end)]));
+AcrossTrackSize = min(nph_haversine([Airs.l1_lat(1,  :)',Airs.l1_lon(  1,:)'], ...
+                                     [Airs.l1_lat(end,:)',Airs.l1_lon(end,:)']));
+
 
 %define a new grid relative to granule bottom left
 dXT = Spacing(1);
 dAT = Spacing(2);
+
+
 
 if dXT > 0; 
   NewXT = linspace(0,AcrossTrackSize,dXT);
@@ -613,104 +612,72 @@ else
   NewAT = 0:abs(dAT):AlongTrackSize;
 end
 
-
- 
-%compute the geographic spacing of the original granule
-OldXT = Lon.*NaN;
-for iAT = 1:1:size(Lon,2)
-  Loc1 = [Lat(:,iAT),Lon(:,iAT)];
-  Loc2 = circshift(Loc1,1,1);
-  OldXT(:,iAT) = nph_haversine(Loc1,Loc2);
-  OldXT(1,iAT) = OldXT(2,iAT); %close enough
-end
-for iXT = 2:1:size(Lon,1); OldXT(iXT,:) = OldXT(iXT,:)+OldXT(iXT-1,:); end
-
-OldAT = Lon.*NaN;
-for iXT = 1:1:size(Lon,1)
-  Loc1 = [Lat(iXT,:);Lon(iXT,:)]';
-  Loc2 = circshift(Loc1,1,1);
-  OldAT(iXT,:) = nph_haversine(Loc1,Loc2);
-  OldAT(iXT,1) = OldAT(iXT,2); %close enough
-end
-for iAT = 2:1:size(Lon,2); OldAT(:,iAT) = OldAT(:,iAT-1,:)+OldAT(:,iAT,:); end
-clear Loc1 Loc2 iXT iAT
-
-%shift to centre, to avoid some odd edge effects
-OldAT = OldAT - mean(OldAT(:));
-OldXT = OldXT - mean(OldXT(:));
-NewAT = NewAT - mean(NewAT(:));
-NewXT = NewXT - mean(NewXT(:));
-
-%Now we need to choose between 2D and 3D interpolation.  Obviously, 3D is
-%much much slower, and not worth doing if we're using the central data
-%region, which is regularly 3km spaced
-if isnan(ZSpacing)
-
-  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%  
-  %2d only. yay, fast!
-  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-  
-  %store spacing info
-  Spacing = [mean(diff(NewXT)),mean(diff(NewAT)),mode(diff(Airs.ret_z))];
-  
-  %produce grid
-  [NewAT,NewXT] = meshgrid(NewAT,NewXT);
- 
-  %hence, for each layer interpolate the old grid onto the new grid
-  NewT = NaN([size(NewAT),size(T,3)]);
-  
-  %for first level, compute a scattered interpolant
-  TAtLev = T(:,:,1);
-  I = scatteredInterpolant(OldXT(:),OldAT(:),TAtLev(:),Interpolant,Extrapolant);
-  NewT(:,:,1) = I(NewXT,NewAT);
-  
-  %for all subsequent levels, reuse the scattered interpolant coords
-  for iLevel=2:1:size(NewT,3);
-    TAtLev = T(:,:,iLevel);
-    I.Values = TAtLev(:);
-    NewT(:,:,iLevel) = I(NewXT,NewAT);
-  end
-  
-else
-  
-  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%  
-  %3d spacings. slower.
-  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
- 
-  
-  disp('critical error: 3D interpolation not yet implemented')
-  stop
-  
-end
-  
-%do a single layer for lat, lon and time
-I = scatteredInterpolant(OldXT(:),OldAT(:),Lon(:),Interpolant,Extrapolant);
-NewLon = I(NewXT,NewAT);
-
-I = scatteredInterpolant(OldXT(:),OldAT(:),Lat(:),Interpolant,Extrapolant);
-NewLat = I(NewXT,NewAT);
-
-I = scatteredInterpolant(OldXT(:),OldAT(:),Time(:),Interpolant,Extrapolant);
-NewTime = I(NewXT,NewAT);
-
-  
-  
+[lonout,latout,ti, ...
+ a,b,timeout]           = put_airs_on_regular_grid(Lon,Lat,Time,T, ...
+                                                   mean(diff(NewXT(:))),mean(diff(NewAT(:))), ...
+                                                   Interpolant,Extrapolant);
 
 
 %overwrite the variables, and return
-Airs.l1_lon    = NewLon;
-Airs.l1_lat    = NewLat;
-Airs.l1_time   = NewTime;
-Airs.ret_temp  = NewT;
-
+Airs.l1_lon    = lonout;
+Airs.l1_lat    = latout;
+Airs.l1_time   = timeout;
+Airs.ret_temp  = ti;
+Spacing        = [a,b];
 
 
 return
 
 
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% lightly-modified form of Neil's function to do this
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
+function varargout = put_airs_on_regular_grid(lon,lat,time,t,dXT,dAT,Interpolant,Extrapolant)
 
+xt_mid = ceil(size(t,1)/2);
 
+% first get ALONG TRACK spacing and azimuth:
+[~,az_at] = distance(lat(xt_mid,1:end-1),lon(xt_mid,1:end-1),lat(xt_mid,2:end),lon(xt_mid,2:end));
+az_at(end+1) = az_at(end);
+% d_at(end+1) = d_at(end);
+at_spacing = dAT;%mean(deg2km(d_at));
+d_at = 0:at_spacing:(at_spacing*(size(t,2)-1));
+
+% now get CROSS TRACK spacing:
+[d_xt,~] = distance(repmat(lat(xt_mid,:),size(t,1),1),repmat(lon(xt_mid,:),size(t,1),1),lat,lon);
+d_xt = deg2km(mean(d_xt,2))';
+d_xt(1:(xt_mid-1)) = -d_xt(1:(xt_mid-1));
+
+% define new grid you want:
+xt_vec = linspace(min(d_xt),max(d_xt),size(t,1));
+at_vec = d_at;
+[XT,~] = ndgrid(xt_vec,at_vec);
+xt_spacing = dXT;%mean(diff(xt_vec));
+
+% use reckon to find new lats and lons:
+[latout,lonout] = reckon(repmat(lat(xt_mid,:),size(t,1),1),repmat(lon(xt_mid,:),size(t,1),1),km2deg(XT),repmat(az_at+90,size(t,1),1));
+
+% interp each level:
+ti = nan(size(t));
+for z = 1:size(t,3)
+    F = griddedInterpolant({d_xt,d_at},t(:,:,z),Interpolant,Extrapolant);
+    ti(:,:,z) = F({xt_vec,at_vec});
+end
+
+%and time
+F = griddedInterpolant({d_xt,d_at},time,Interpolant,Extrapolant);
+timeout = F({xt_vec,at_vec});
+
+% send to outputs:
+varargout{1} = lonout;
+varargout{2} = latout;
+varargout{3} = ti;
+varargout{4} = xt_spacing;
+varargout{5} = at_spacing;
+varargout{6} = timeout;
+
+return
 
 
 
@@ -1108,16 +1075,16 @@ function Y = smoothn(X,sz,filt,std)
 %     $Revision: 1.1 $
 %     $State: Exp $
 
-if nargin == 2,
+if nargin == 2;
   filt = 'b';
-elseif nargin == 3,
+elseif nargin == 3;
   std = 0.65;
-elseif nargin>4 | nargin<2
+elseif nargin>4 || nargin<2
   error('Wrong number of input arguments.');
 end
 
 % check the correctness of sz
-if ndims(sz) > 2 | min(size(sz)) ~= 1
+if ndims(sz) > 2 || min(size(sz)) ~= 1
   error('SIZE must be a vector');
 elseif length(sz) == 1
   sz = repmat(sz,ndims(X));
@@ -1139,7 +1106,7 @@ sz = sz(:)';
 
 % check for appropriate size
 padSize = (sz-1)/2;
-if ~isequal(padSize, floor(padSize)) | any(padSize<0)
+if ~isequal(padSize, floor(padSize)) || any(padSize<0)
   error('All elements of SIZE must be odd integers >= 1.');
 end
 
@@ -1194,14 +1161,14 @@ function argout = gridnd(argin)
 nin = length(argin);
 nout = nin;
 
-for i=nin:-1:1,
+for i=nin:-1:1;
   argin{i} = full(argin{i}); % Make sure everything is full
-  siz(i) = prod(size(argin{i}));
+  siz(i) = numel(argin{i});
 end
 if length(siz)<nout, siz = [siz ones(1,nout-length(siz))]; end
 
 argout = [];
-for i=1:nout,
+for i=1:nout;
   x = argin{i}(:); % Extract and reshape as a vector.
   s = siz; s(i) = []; % Remove i-th dimension
   x = reshape(x(:,ones(1,prod(s))),[length(x) s]); % Expand x
