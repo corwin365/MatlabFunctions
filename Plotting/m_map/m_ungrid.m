@@ -20,22 +20,27 @@ function m_ungrid(goptn)
 % it's mine, so you can't sell it.
 
 if nargin==0
-  mstr='m_grid_';
+    mstr='m_grid_';
 else
-  mstr=['m_' lower(goptn)];
+    mstr=['m_' lower(goptn)];
+    if strncmpi('utm',goptn,3) && strncmp('m_utm_grid',get(gca,'tag'),5)
+         set(gca,'visible','off');
+         return
+    end
 end
+
 
 hh=get(gca,'children');
 
 things=get(hh,'tag');
 if length(hh)==1, things={things}; end
 
-htags_del=strmatch(mstr,things);
+htags_del=strncmp(mstr,things,length(mstr));
 if ~isempty(htags_del)
     delete(hh(htags_del));
 end
 
-if strmatch('m_grid',mstr)
+if strncmp('m_grid',mstr,6)
   set(gca,'visible','on');
 end
 

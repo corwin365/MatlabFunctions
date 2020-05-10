@@ -64,10 +64,10 @@ function [ncst,Area,k]=mu_coast(optn,varargin)
 %           Nov/17 - redid a lot of the gshhs-related stuff
 %
 % This software is provided "as is" without warranty of any kind. But
-% it's mine, so you can't sell it.
+% its mine, so you can't sell it.
 
 
-global MAP_PROJECTION MAP_VAR_LIST
+global MAP_PROJECTION MAP_VAR_LIST  
 
 % Have to have initialized a map first
 
@@ -108,8 +108,10 @@ switch optn(1)
     varargin(1)=[];
     k=[find(isnan(ncst(:,1)))];  % Get k
     Area=ones(size(k));          % Make dummy Area vector (all positive).
-  otherwise
-    load m_coasts
+    otherwise
+    currloc=mfilename('fullpath');  % Octave has problems finding the file 
+    load([currloc(1:end-8) 'm_coasts.mat']);
+    
 end
 
  
@@ -122,41 +124,50 @@ end
 
 switch MAP_PROJECTION.routine
  case {'mp_cyl','mp_conic','mp_tmerc'}
-  if MAP_VAR_LIST.longs(2)<-180
+  if MAP_VAR_LIST.longs(2)<=-180
    ncst(:,1)=ncst(:,1)-360;
-  elseif MAP_VAR_LIST.longs(1)>180
+  elseif MAP_VAR_LIST.longs(1)>=180
    ncst(:,1)=ncst(:,1)+360;
-  elseif MAP_VAR_LIST.longs(1)<-180
-   Area=[Area;Area];
-   k=[k;k(2:end)+k(end)-1];
-   ncst=[ncst;[ncst(2:end,1)-360 ncst(2:end,2)]];
-   % This is kinda kludgey - but sometimes adding all these extra points
-   % causes wrap-around in the conic projection, so we want to limit the
-   % longitudes to the range needed. However, we don't just clip them to
-   % min long because that can cause problems in trying to decide which way
-   % curves are oriented when doing the fill algorithm below. So instead
-   % I sort of crunch the scale, preserving topology.
-   %
-   % 12/Sep/2006 - in the gsshs_crude database we have a lot of long skinny
-   % things which interact badly with this - so I offset the scrunch 2 degrees
-   % away from the bdy
-   %
-   % Mar/2017 - OK, so somebody used a rectbox 'on' which gave a really wide range of
-   % lat/long, and it turns out I need to scale the *other* side as well!
-   nn=ncst(:,1)>MAP_VAR_LIST.longs(2)+2;                                          % added 2017
-   ncst(nn,1)=(ncst(nn,1)-MAP_VAR_LIST.longs(2)-2)/100+MAP_VAR_LIST.longs(2)+2;   %  "
-   nn=ncst(:,1)<MAP_VAR_LIST.longs(1)-2;
-   ncst(nn,1)=(ncst(nn,1)-MAP_VAR_LIST.longs(1)+2)/100+MAP_VAR_LIST.longs(1)-2;
-  elseif MAP_VAR_LIST.longs(2)>180
-   Area=[Area;Area];
-   k=[k;k(2:end)+k(end)-1];
-   ncst=[ncst;[ncst(2:end,1)+360 ncst(2:end,2)]];
-   % Ditto.
-   nn=ncst(:,1)>MAP_VAR_LIST.longs(2)+2;
-   ncst(nn,1)=(ncst(nn,1)-MAP_VAR_LIST.longs(2)-2)/100+MAP_VAR_LIST.longs(2)+2;
-   nn=ncst(:,1)<MAP_VAR_LIST.longs(1)-2;                                          % added 2017
-   ncst(nn,1)=(ncst(nn,1)-MAP_VAR_LIST.longs(1)+2)/100+MAP_VAR_LIST.longs(1)-2;   % "  
- %%%  disp('beep');
+  else
+      if MAP_VAR_LIST.longs(1)<=-180
+           Area=[Area;Area];
+           k=[k;k(2:end)+k(end)-1];
+           ncst=[ncst;[ncst(2:end,1)-360 ncst(2:end,2)]];
+           % This is kinda kludgey - but sometimes adding all these extra points
+           % causes wrap-around in the conic projection, so we want to limit the
+           % longitudes to the range needed. However, we don't just clip them to
+           % min long because that can cause problems in trying to decide which way
+           % curves are oriented when doing the fill algorithm below. So instead
+           % I sort of crunch the scale, preserving topology.
+           %
+           % 12/Sep/2006 - in the gsshs_crude database we have a lot of long skinny
+           % things which interact badly with this - so I offset the scrunch 2 degrees
+           % away from the bdy
+           %
+           % Mar/2017 - OK, so somebody used a rectbox 'on' which gave a really wide range of
+           % lat/long, and it turns out I need to scale the *other* side as well!
+           % Jan/2020 - in geomagnetic coords I don't want to do this - it
+           % casuses problems once the coords are transformed.
+           if strcmp(MAP_PROJECTION.coordsystem.name,'geographic') || ~strcmp(MAP_PROJECTION.routine,'mp_cyl')
+               nn=ncst(:,1)>MAP_VAR_LIST.longs(2)+2;                                          % added 2017
+               ncst(nn,1)=(ncst(nn,1)-MAP_VAR_LIST.longs(2)-2)/100+MAP_VAR_LIST.longs(2)+2;   %  "
+               nn=ncst(:,1)<MAP_VAR_LIST.longs(1)-2;
+               ncst(nn,1)=(ncst(nn,1)-MAP_VAR_LIST.longs(1)+2)/100+MAP_VAR_LIST.longs(1)-2;
+           end
+      end
+      if MAP_VAR_LIST.longs(2)>=180
+           Area=[Area;Area];
+           k=[k;k(2:end)+k(end)-1];
+           ncst=[ncst;[ncst(2:end,1)+360 ncst(2:end,2)]];
+           % Ditto.
+           if strcmp(MAP_PROJECTION.coordsystem.name,'geographic') || ~strcmp(MAP_PROJECTION.routine,'mp_cyl')
+               nn=ncst(:,1)>MAP_VAR_LIST.longs(2)+2;
+               ncst(nn,1)=(ncst(nn,1)-MAP_VAR_LIST.longs(2)-2)/100+MAP_VAR_LIST.longs(2)+2;
+               nn=ncst(:,1)<MAP_VAR_LIST.longs(1)-2;                                          % added 2017
+               ncst(nn,1)=(ncst(nn,1)-MAP_VAR_LIST.longs(1)+2)/100+MAP_VAR_LIST.longs(1)-2;   % "  
+           end
+        %   disp('beep');
+      end
   end
 end
 
@@ -192,10 +203,15 @@ switch optn
       yl=MAP_VAR_LIST.lats;
       X=ncst(:,1);
       Y=ncst(:,2);
-      [X,Y]=mu_util('clip','on',X,xl(1),X<xl(1),Y);
-      [X,Y]=mu_util('clip','on',X,xl(2),X>xl(2),Y);
-      [Y,X]=mu_util('clip','on',Y,yl(1),Y<yl(1),X);
-      [Y,X]=mu_util('clip','on',Y,yl(2),Y>yl(2),X);
+      % This causes problems with geomagnetic coords. However, just
+      % removing it seems wrong. We will see what happens when
+      % someone complains.
+      if strcmp(MAP_PROJECTION.coordsystem.name.name,'geographic')
+          [X,Y]=mu_util('clip','on',X,xl(1),X<xl(1),Y);
+          [X,Y]=mu_util('clip','on',X,xl(2),X>xl(2),Y);
+          [Y,X]=mu_util('clip','on',Y,yl(1),Y<yl(1),X);
+          [Y,X]=mu_util('clip','on',Y,yl(2),Y>yl(2),X);
+       end
       oncearound=4;
     case 'circle'
       rl=MAP_VAR_LIST.rhomax;
@@ -305,7 +321,7 @@ switch optn
               else
                   p_hand(i)=patch(xx,yy,varargin{2:end});
                   if ishandle(p_hand(i)),set(p_hand(i),'tag',[ get(p_hand(i),'tag') '_land']);end
-              end
+               end
 	  
 	     else  % speckle
             if ~strcmp(MAP_VAR_LIST.rectbox,'off')  % If we were clipping in
@@ -334,22 +350,22 @@ switch optn
   
    otherwise
  
-  % This handles the odd points required at the south pole by any Antarctic
-  % coastline by setting them to NaN (for lines only)
-  ii=ncst(:,2)<=-89.9;
-  if any(ii), ncst(ii,:)=NaN; end
-  
-  [X,Y]=m_ll2xy(ncst(:,1),ncst(:,2),'clip','on');
+      % This handles the odd points required at the south pole by any Antarctic
+      % coastline by setting them to NaN (for lines only)
+      ii=ncst(:,2)<=-89.9;
+      if any(ii), ncst(ii,:)=NaN; end
+
+      [X,Y]=m_ll2xy(ncst(:,1),ncst(:,2),'clip','on');
+
+      % Get rid of 2-point lines (these are probably clipped lines spanning the window)
+      fk=isfinite(X);        
+      st=find(diff(fk)==1)+1;
+      ed=find(diff(fk)==-1);
+      k=find((ed-st)==1);
+      X(st(k))=NaN;
+
+      p_hand=line(X,Y,varargin{:}); 
  
-  % Get rid of 2-point lines (these are probably clipped lines spanning the window)
-  fk=isfinite(X);        
-  st=find(diff(fk)==1)+1;
-  ed=find(diff(fk)==-1);
-  k=find((ed-st)==1);
-  X(st(k))=NaN;
-
-  p_hand=line(X,Y,varargin{:}); 
-
 end
 
 ncst=p_hand;
@@ -591,7 +607,7 @@ while cnt>0
         ncst(k(l)+1:k(l+1),:)=[cx,cy;NaN NaN];
      end
     
-     %plot(ncst(:,1),ncst(:,2));drawnow; 
+    % plot(ncst(:,1),ncst(:,2));drawnow; pause;
    end
   [cnt,g]=get_gheader(fid);
 end

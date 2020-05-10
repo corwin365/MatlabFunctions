@@ -34,6 +34,9 @@ addParameter(p,'SamplingRate',1./24./60./60.*5,CheckPositive);  %5-second sampli
 %max height change in a cruise
 addParameter(p,'CruiseDz',100,CheckPositive);  %100m
 
+%assume we want to apply the error flags unless stated otherwise
+addParameter(p,'ApplyFlags',true,@islogical);  %100m
+
 %time window for the above change (in units of SamplingRate, above)
 CheckWindow = @(x) validateattributes(x,{'numeric'},{'>',0,'odd'});
 addParameter(p,'CruiseWindow',25,CheckWindow);  %25 time steps
@@ -84,7 +87,7 @@ IAGOS.Time = datenum(Units(15:end),'yyyy-mm-dd HH:MM:SS') + IAGOS.UTC_time./60./
 clear Units
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% NaNify bad data
+%% NaNify actively bad data
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 for iVar=1:1:numel(IAGOS.MetaData.Variables)
@@ -102,6 +105,35 @@ for iVar=1:1:numel(IAGOS.MetaData.Variables)
   
 end
 clear Attrib idx FillVal iVar Var
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% apply error flags
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+if Input.ApplyFlags == 1;
+  
+  %list of vars which have validation flags
+  Vars = {'baro_alt_AC','radio_alt_AC','gps_alt_AC','air_press_AC',...
+          'air_speed_AC','ground_speed_AC','air_temp_AC','air_stag_temp_AC', ...
+          'wind_dir_AC','wind_speed_AC','zon_wind_AC','mer_wind_AC', ...
+          'air_temp_PM','air_stag_temp_PM'};
+  
+  for iVar=1:1:numel(Vars)
+    
+    Flags = IAGOS.([Vars{iVar},'_val']);
+    if nansum(Flags) == 0; continue; end %no problem
+    
+    %identify bad data and set it to NaN
+    Bad = find(Flags ~= 0 & ~isnan(Flags));
+    Var = IAGOS.(Vars{iVar});
+    Var(Bad) = NaN;
+    IAGOS.(Vars{iVar}) = Var;
+    clear Bad Var
+    
+    
+    
+  end; clear iVar Vars
+end
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% interpolate to constant time sampling

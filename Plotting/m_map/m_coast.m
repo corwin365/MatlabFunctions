@@ -24,7 +24,7 @@ function h=m_coast(varargin)
 Currentmap=m_coord('set');
 m_coord('geographic');
 
-
 h=mu_coast('default',varargin{:},'tag','m_coast');
 
+ 
 m_coord(Currentmap.name);

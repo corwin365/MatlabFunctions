@@ -1,6 +1,6 @@
 function [h,varargout]=m_ellipse(long,lat,fmaj,fmin,finc,fpha,scl,tpe,varargin)
 % M_ELLIPSE Draws ellipses on a map.
-%      [H]=M_ELLIPSE(LONG,LAT,MAJOR,MINOR,INC,PHA,SCALE,TYPE)
+%      [H]=M_ELLIPSE(LONG,LAT,MAJOR,MINOR,INC,PHA,SCALE,TYPE,VARARGIN)
 %      draws ellipses as patch objects or lines on a map created 
 %      by the M_Map package.
 %

@@ -4,12 +4,15 @@ function h=m_line(long,lat,varargin)
 %    current axes. If LONG and LAT are matrices the same size, one 
 %    line per column is added.
 % 
-%    LINE returns a column vector of handles to LINE objects, 
+%    M_LINE returns a column vector of handles to LINE objects, 
 %    one handle per line. LINEs are children of AXES objects.
 % 
 %    The LONG,LAT pair can be followed by 
 %    parameter/value pairs to specify additional properties of the lines.
 %    These are standard 'line' properties.
+%
+%    Additionally, you can set the 'clip' property to 'on' (default),
+%    which clips lines to the map edges, or to 'off' which does not.
 %
 %    See also LINE, M_LL2XY
 
@@ -31,7 +34,7 @@ while k<length(varargin)
   switch lower(varargin{k}(1:3))
     case 'cli'
       clp=varargin{k+1};
-      if isempty(findstr(clp,'on'))
+      if isempty(strfind(clp,'on'))
         varargin{k+1}='off';
       else
         varargin{k+1}='on';

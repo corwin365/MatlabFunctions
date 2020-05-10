@@ -1,4 +1,4 @@
-function m_proj(proj,varargin)
+function outval=m_proj(proj,varargin)
 % M_PROJ  Initializes map projections info, putting the result into a structure
 %
 %         M_PROJ('get') tells you the current state
@@ -7,6 +7,7 @@ function m_proj(proj,varargin)
 %                                   'get' list.
 %         M_PROJ('proj name','property',value,...) initializes a projection.
 %
+%         OUT=M_PROJ(...) returns a data structure with projection settings
 %
 %         see also M_GRID, M_LL2XY, M_XY2LL.
 
@@ -22,6 +23,9 @@ function m_proj(proj,varargin)
 %	    - Added lines 62-70 & 74 
 %		to harden against error when no proj is set
 %             (fixes thanks to Lars Barring)
+% 18/Jan/18 - added output variable
+% 19/Feb/19 - added some error checking on lat/lon limits
+% 24/Jun/19 - fix due to MT to define return variable in all cases.
 
 global MAP_PROJECTION MAP_VAR_LIST MAP_COORDS
 
@@ -68,9 +72,9 @@ switch proj
                   ['**** USE "m_proj(''' varargin{1} ''',<see options above>)" ****']);
         disp(X);
       else
-	k=m_match(varargin{1},projections(:).name);
-	eval(['X=' projections(k).routine '(''get'');']);
-	disp(X);
+	    k=m_match(varargin{1},projections(:).name);
+	    eval(['X=' projections(k).routine '(''get'');']);
+	    disp(X);
       end	
     end
 
@@ -83,12 +87,46 @@ switch proj
     disp('  ''get''                      - get current mapping parameters (if defined)');
     disp('  ''projection'' <,properties> - initialize projection\n');
 
- otherwise                % If a valid name, give the usage.
+  otherwise                % If a valid name, give the usage.
     k=m_match(proj,projections(:).name);
     MAP_PROJECTION=projections(k);
         
     eval([ projections(k).routine '(''initialize'',projections(k).name,varargin{:});']);
 
+    % Some error checking
+    if diff(MAP_VAR_LIST.lats)<=0.0001  % if you make this too small drawing ticks in m_grid can screw up
+        error(sprintf('Lower latitude (%.3f) is not < upper latitude (%.3f)',MAP_VAR_LIST.lats));
+        clear MAP_PROJECTION
+        return
+    end
+    if MAP_VAR_LIST.lats(1)<-90 || MAP_VAR_LIST.lats(2)>90 || any(isnan(MAP_VAR_LIST.lats))
+        error(sprintf('Latitude range (%.3f %.3f) is outside of known bounds of -90 to 90',MAP_VAR_LIST.lats));
+        clear MAP_PROJECTION
+        return
+    end
+    if diff(MAP_VAR_LIST.longs)<=0.0001
+        error(sprintf('Left longitude (%.3f) is not < right longitude (%.3f)',MAP_VAR_LIST.longs));
+        clear MAP_PROJECTION
+        return
+    end
+    if MAP_VAR_LIST.longs(1)<-540 || MAP_VAR_LIST.longs(2)>540 || any(isnan(MAP_VAR_LIST.longs))
+        error(sprintf('Longitude range (%.3f %.3f) is outside of known bounds of -540 to 540',MAP_VAR_LIST.longs));
+        clear MAP_PROJECTION
+        return
+    end
+    if diff(MAP_VAR_LIST.xlims)<=0
+        error('Map has zero width - check m_proj input parameters');
+        clear MAP_PROJECTION
+        return
+    end
+    if diff(MAP_VAR_LIST.ylims)<=0
+        error('Map has zero height - check m_proj input parameters');
+        clear MAP_PROJECTION
+        return
+    end
+    
+    
+    
     % With the projection store what coordinate system we are using to define it.
     if isempty(MAP_COORDS)
       m_coord('geographic');
@@ -103,7 +141,8 @@ switch proj
     if strcmp(MAP_PROJECTION.version.Name,'Octave')
        MAP_PROJECTION.IsOctave=true;
        MAP_PROJECTION.newgraphics=false;
-       MAP_PROJECTION.LARGVAL=bitmax;
+       MAP_PROJECTION.LARGVAL=flintmax; % was bitmax, but flintmax works in 3.8.1 and in 4.2 and later
+                                        % octave issues a warning that bitmax should be replaced with flintmax
     else
        MAP_PROJECTION.IsOctave=false;
        if verLessThan('matlab','8.4')
@@ -119,11 +158,14 @@ switch proj
            MAP_PROJECTION.LARGVAL=flintmax;
        end
     end
-    
- 
+end
 
+if nargout==1
+     outval=MAP_VAR_LIST;
+end
 
 end
+
 
 %---------------------------------------------------------
 function projections=m_getproj
@@ -141,10 +183,10 @@ function projections=m_getproj
 % Get all the projections
 
 lpath=which('m_proj');
-fslashes=findstr(lpath,'/');
-bslashes=findstr(lpath,'\');
-colons=findstr(lpath,':');
-closparantheses=findstr(lpath,']');
+fslashes=strfind(lpath,'/');
+bslashes=strfind(lpath,'\');
+colons=strfind(lpath,':');
+closparantheses=strfind(lpath,']');
 if ~isempty(fslashes)
   lpath=[ lpath(1:max(fslashes)) 'private/'];
 elseif ~isempty(bslashes)
@@ -170,7 +212,7 @@ end
 l=1;
 projections=[];
 for k=1:length(w)
- funname=w(k).name(1:(findstr(w(k).name,'.'))-1);
+ funname=w(k).name(1:(strfind(w(k).name,'.'))-1);
  projections(l).routine=funname;
  eval(['names= ' projections(l).routine '(''name'');']);
  for m=1:length(names)
@@ -180,6 +222,7 @@ for k=1:length(w)
  end
 end
 
+end
 
 %----------------------------------------------------------
 function match=m_match(arg,varargin)
@@ -187,10 +230,12 @@ function match=m_match(arg,varargin)
 
 % Rich Pawlowicz (rich@ocgy.ubc.ca) 2/Apr/1997
 
-match=strmatch(lower(arg),cellstr(lower(char(varargin))));
+match=find(strncmpi(deblank(arg),cellstr(char(varargin)),length(deblank(arg))));
 
 if length(match)>1
   error(['Projection ''' arg ''' not a unique specification']);
 elseif isempty(match)
   error(['Projection ''' arg ''' not recognized']);
+end
+
 end
