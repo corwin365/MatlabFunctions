@@ -90,6 +90,59 @@ IAGOS.Time = datenum(Units(15:end),'yyyy-mm-dd HH:MM:SS') + IAGOS.UTC_time./60./
 clear Units
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% deduplicate lats and lons
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%some records (especially early ones) have quite imprecise lat and lon
+%data, which results in points which are at the "same place"
+
+%let's fix them, by linearly inteprolating to the next unique lat/lon
+
+[~,llidx] = unique(IAGOS.lon + 1000.*IAGOS.lat);
+llidx = sort(llidx,'asc'); %this is necessary for the internal if loop to work correctly
+if numel(llidx) ~= unique(IAGOS.lon);
+  
+  for iX = 1:1:numel(llidx)
+    
+    %find all points with this lat/lon pair
+    Lon = IAGOS.lon(llidx(iX));
+    Lat = IAGOS.lat(llidx(iX));
+    
+    idx = find(IAGOS.lon == Lon & IAGOS.lat == Lat);
+    
+    %hence, interpolate the lats and lons that are missing
+    %obviously we cannot do this if it is the end of the flight, so check
+    %this first
+    
+    if max(idx) < numel(IAGOS.lon)
+      NextLon = IAGOS.lon(max(idx)+1);
+      NextLat = IAGOS.lat(max(idx)+1);
+      
+      NewLon = linspace(Lon,NextLon,numel(idx));
+      NewLat = linspace(Lat,NextLat,numel(idx));
+      
+      IAGOS.lon(idx) = NewLon;
+      IAGOS.lat(idx) = NewLat;
+      
+    else
+      %extrapolate if we're at the end
+      %this isn't great, but we won't be using landing data anyway and it
+      %should be very rare
+      x = min(idx)-5:min(idx)-1;
+      xq = idx;
+      IAGOS.lon(idx) = interp1(x,IAGOS.lon(x),xq,'linear','extrap');
+      IAGOS.lat(idx) = interp1(x,IAGOS.lat(x),xq,'linear','extrap');
+      clear x xq
+    end
+    
+
+    
+  end
+  
+end
+clear llidx iX Lon Lat idx NextLon NextLat NewLon NewLat
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% NaNify actively bad data
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
