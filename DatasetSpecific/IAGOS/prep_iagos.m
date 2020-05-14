@@ -35,7 +35,10 @@ addParameter(p,'SamplingRate',1./24./60./60.*5,CheckPositive);  %5-second sampli
 addParameter(p,'CruiseDz',100,CheckPositive);  %100m
 
 %assume we want to apply the error flags unless stated otherwise
-addParameter(p,'ApplyFlags',true,@islogical);  %100m
+addParameter(p,'ApplyFlags',true,@islogical);
+
+%assume we want to sample evenly in time rather than space
+addParameter(p,'SpaceSamplingRate',false,@islogical);
 
 %time window for the above change (in units of SamplingRate, above)
 CheckWindow = @(x) validateattributes(x,{'numeric'},{'>',0,'odd'});
@@ -135,30 +138,67 @@ if Input.ApplyFlags == 1;
   end; clear iVar Vars
 end
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% interpolate to constant time sampling
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% interpolate to constant time sampling or constant space sampling
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
+
+if Input.SpaceSamplingRate ~= 1;
+  %%%%%%%%%%%%%%%%%%
+  %time resampling
+  %%%%%%%%%%%%%%%%%%
     
-OldTime = IAGOS.Time;
-NewTime = min(IAGOS.Time): Input.SamplingRate : max(IAGOS.Time);
-
-Fields = fieldnames(IAGOS);
-for iField=1:1:numel(Fields)
-  if strcmp(Fields{iField},'MetaData'); continue; end
+  OldTime = IAGOS.Time;
+  NewTime = min(IAGOS.Time): Input.SamplingRate : max(IAGOS.Time);
   
-  IAGOS.(Fields{iField}) = interp1(OldTime,IAGOS.(Fields{iField}),NewTime);
+  Fields = fieldnames(IAGOS);
+  for iField=1:1:numel(Fields)
+    if strcmp(Fields{iField},'MetaData'); continue; end
+    
+    IAGOS.(Fields{iField}) = interp1(OldTime,IAGOS.(Fields{iField}),NewTime);
+    
+  end
+  
+  IAGOS.OriginalTime = OldTime;
+
+  clear OldTime NewTime iField Fields
+
+else
+  %%%%%%%%%%%%%%%%%%
+  %space resampling
+  %%%%%%%%%%%%%%%%%%
+  
+  %work out distance between each point
+  x = [IAGOS.lat,IAGOS.lon];
+  y = circshift(x,1,1);
+  dx = nph_haversine(x,y);
+  dx([1,end]); %assume first point spacing is same as second, as can't compute otherwise
+  
+  %and hence stepwise distance along-track
+  dxS = dx; for iX=2:1:numel(dxS); dxS(iX) = dxS(iX-1)+dxS(iX); end
+  
+  %work out new spacing
+  dx2 = 0:Input.SamplingRate:max(dxS);
+  
+  %interpolate
+  Fields = fieldnames(IAGOS);  
+  for iField=1:1:numel(Fields)
+    if strcmp(Fields{iField},'MetaData'); continue; end
+    
+    IAGOS.(Fields{iField}) = interp1(dxS,IAGOS.(Fields{iField}),dx2);
+    
+  end
+  
+  clear iField Fields dxS dx2
   
 end
-
-IAGOS.OriginalTime = OldTime;
-
-clear OldTime NewTime iField Fields
-
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% travel distance (in km)
 %% using lat/lon, but cross-checked with speed/time for a few hundred flights and look pretty similar
+%if we did space sampling then this is just repeating what we did and
+%storing the answer, but the runtime is very small so this is fine, and
+%makes the computational logic cleaner
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 a = [IAGOS.lat;IAGOS.lon];
