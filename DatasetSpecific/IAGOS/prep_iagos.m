@@ -182,6 +182,25 @@ if numel(llidx) ~= unique(IAGOS.lon);
 end
 clear llidx iX Lon Lat idx NextLon NextLat NewLon NewLat
 
+
+%I found at least one record with a negative time step. If these exist
+%in the data, then sort everything into order
+if min(diff(IAGOS.Time)) < 0;
+
+  [~,order] = sort(IAGOS.Time,'ascend');
+  
+  Fields = fieldnames(IAGOS);
+  for iField=1:1:numel(Fields)
+    if strcmp(Fields{iField},'MetaData'); continue; end
+    Var = IAGOS.(Fields{iField});
+    Var = Var(order);
+    IAGOS.(Fields{iField}) = Var;
+  end
+  clear order iField Var Fields
+
+end
+  
+
 %occasionally we have duplicate times. if so, shift by a very small amount
 %to have some kind of safe interpolation sequence
 Bad = find(diff(IAGOS.Time) == 0);
@@ -256,8 +275,8 @@ if Input.SpaceSamplingRate ~= 1;
   
   OldTime = IAGOS.Time;
   NewTime = min(IAGOS.Time): Input.SamplingRate : max(IAGOS.Time);
-  
   Fields = fieldnames(IAGOS);
+
   for iField=1:1:numel(Fields)
     if strcmp(Fields{iField},'MetaData'); continue; end
     if sum(~isnan(IAGOS.(Fields{iField}))) < 2; 
@@ -265,11 +284,10 @@ if Input.SpaceSamplingRate ~= 1;
       IAGOS = rmfield(IAGOS,Fields{iField});
       continue
     end 
-    
+
     IAGOS.(Fields{iField}) = interp1gap(OldTime,IAGOS.(Fields{iField}), ...
                                         NewTime,Input.MaxTimeGap);
-                                   
-    
+
   end
   
   IAGOS.OriginalTime = OldTime;
@@ -329,7 +347,11 @@ IAGOS.dx = cumsum(IAGOS.dx);
 
          
 %derivative of altitude
-dz = [diff(IAGOS.baro_alt_AC),0];
+try
+  dz = [diff(IAGOS.baro_alt_AC),0]; %first choice of altitude metric
+catch
+  dz = [diff(IAGOS.radio_alt_AC),0]; %second choice of altitude metric
+end
 
 
 %produce a running windowed *sum* of this value
