@@ -26,7 +26,9 @@ addRequired(p,'FilePath',@ischar);
 %inputs - fully optional
 %%%%%%%%%%%%%%%%%%%%%%%%%
 
+%custom checking functions
 CheckPositive = @(x) validateattributes(x,{'numeric'},{'>',0});
+CheckWindow = @(x) validateattributes(x,{'numeric'},{'>',0,'odd'});
 
 %sampling rate to interpolate to (days)
 addParameter(p,'SamplingRate',1./24./60./60.*5,CheckPositive);  %5-second sampling
@@ -41,8 +43,12 @@ addParameter(p,'ApplyFlags',true,@islogical);
 addParameter(p,'SpaceSamplingRate',false,@islogical);
 
 %time window for the above change (in units of SamplingRate, above)
-CheckWindow = @(x) validateattributes(x,{'numeric'},{'>',0,'odd'});
 addParameter(p,'CruiseWindow',25,CheckWindow);  %25 time steps
+
+%maximum values of space or time to interpolate over
+%only the relevant one will be used
+addParameter(p,'MaxSpaceGap',50,CheckPositive);  %km
+addParameter(p,'MaxTimeGap',240,CheckPositive);  %seconds
 
 
 %parse the inputs, and tidy up
@@ -90,16 +96,49 @@ IAGOS.Time = datenum(Units(15:end),'yyyy-mm-dd HH:MM:SS') + IAGOS.UTC_time./60./
 clear Units
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% deduplicate lats and lons
+%% NaNify actively bad data
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-%some records (especially early ones) have quite imprecise lat and lon
-%data, which results in points which are at the "same place"
+for iVar=1:1:numel(IAGOS.MetaData.Variables)
+  
+  %find the fill value
+  Attrib= {IAGOS.MetaData.Variables(iVar).Attributes(:).Name};
+  idx = find(strcmp(Attrib,'missing_value') ~= 0);
+  if numel(idx) == 0; continue; end
+  FillVal = IAGOS.MetaData.Variables(iVar).Attributes(idx).Value;
+  
+  %convert fill value to NaN
+  Var = IAGOS.(IAGOS.MetaData.Variables(iVar).Name);
+  Var(Var == FillVal) = NaN;
+  IAGOS.(IAGOS.MetaData.Variables(iVar).Name) = Var;    
+  
+end
+clear Attrib idx FillVal iVar Var
 
-%let's fix them, by linearly inteprolating to the next unique lat/lon
+%if the lat and lon are NaN, then drop the data
+Bad = find(isnan(IAGOS.lon) | isnan(IAGOS.lat));
+if numel(Bad) > 0;
+  Vars = fieldnames(IAGOS);
+  Good = 1:1:numel(IAGOS.lon); Good(Bad) = [];
+  for iVar=1:1:numel(Vars)
+    if strcmp(Vars{iVar},'MetaData'); continue; end
+    Var = IAGOS.(Vars{iVar});
+    Var = Var(Good);
+    IAGOS.(Vars{iVar}) = Var;
+  end
+end
+clear Bad Good Vars iVar
 
-[~,llidx] = unique(IAGOS.lon + 1000.*IAGOS.lat);
-llidx = sort(llidx,'asc'); %this is necessary for the internal if loop to work correctly
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% deduplicate lats, times and lons
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%some records have quite imprecise lat and lon data, which results in 
+%points which are at the "same place". let's fix them, by linearly 
+%interpolating to the next unique lat/lon
+
+[~,llidx] = unique(IAGOS.lon + 1000.*IAGOS.lat,'stable');
 if numel(llidx) ~= unique(IAGOS.lon);
   
   for iX = 1:1:numel(llidx)
@@ -127,7 +166,8 @@ if numel(llidx) ~= unique(IAGOS.lon);
     else
       %extrapolate if we're at the end
       %this isn't great, but we won't be using landing data anyway and it
-      %should be very rare
+      %should be rare
+      
       x = min(idx)-5:min(idx)-1;
       xq = idx;
       IAGOS.lon(idx) = interp1(x,IAGOS.lon(x),xq,'linear','extrap');
@@ -142,25 +182,22 @@ if numel(llidx) ~= unique(IAGOS.lon);
 end
 clear llidx iX Lon Lat idx NextLon NextLat NewLon NewLat
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% NaNify actively bad data
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-for iVar=1:1:numel(IAGOS.MetaData.Variables)
+%occasionally we have duplicate times. if so, shift by a very small amount
+%to have some kind of safe interpolation sequence
+Bad = find(diff(IAGOS.Time) == 0);
+if numel(Bad) ~= 0;
   
-  %find the fill value
-  Attrib= {IAGOS.MetaData.Variables(iVar).Attributes(:).Name};
-  idx = find(strcmp(Attrib,'missing_value') ~= 0);
-  if numel(idx) == 0; continue; end
-  FillVal = IAGOS.MetaData.Variables(iVar).Attributes(idx).Value;
-  
-  %convert fill value to NaN
-  Var = IAGOS.(IAGOS.MetaData.Variables(iVar).Name);
-  Var(Var == FillVal) = NaN;
-  IAGOS.(IAGOS.MetaData.Variables(iVar).Name) = Var;
-  
+  %add the smallest possible increase in time to each one, then iterate
+  %until it's true of all points
+  Done = 0;
+  while Done == 0;
+    Bad = find(diff(IAGOS.Time) == 0);
+    IAGOS.Time(Bad(1)) = IAGOS.Time(Bad(1)) + realmin('single');
+    if numel(diff(IAGOS.Time) == 0); Done = 1; end
+  end
 end
-clear Attrib idx FillVal iVar Var
+clear Done Bad
+
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% apply error flags
@@ -176,6 +213,7 @@ if Input.ApplyFlags == 1;
   
   for iVar=1:1:numel(Vars)
     
+    if ~isfield(IAGOS,[Vars{iVar},'_val']); continue; end %we could have removed the field earlier    
     Flags = IAGOS.([Vars{iVar},'_val']);
     if nansum(Flags) == 0; continue; end %no problem
     
@@ -185,11 +223,25 @@ if Input.ApplyFlags == 1;
     Var(Bad) = NaN;
     IAGOS.(Vars{iVar}) = Var;
     clear Bad Var
-    
-    
+     
     
   end; clear iVar Vars
 end
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% drop any variables that are now empty
+%this is to make the use of interp1gap below safe
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+Vars = fieldnames(IAGOS);
+
+for iField=1:1:numel(Vars)
+  if strcmp(Vars{iField},'MetaData') == 1; continue;end
+  if nansum(IAGOS.(Vars{iField})) == 0;
+    IAGOS = rmfield(IAGOS,Vars{iField});
+  end
+end
+clear iField Vars
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% interpolate to constant time sampling or constant space sampling
@@ -197,18 +249,26 @@ end
 
 
 if Input.SpaceSamplingRate ~= 1;
+
   %%%%%%%%%%%%%%%%%%
   %time resampling
   %%%%%%%%%%%%%%%%%%
-    
+  
   OldTime = IAGOS.Time;
   NewTime = min(IAGOS.Time): Input.SamplingRate : max(IAGOS.Time);
   
   Fields = fieldnames(IAGOS);
   for iField=1:1:numel(Fields)
     if strcmp(Fields{iField},'MetaData'); continue; end
+    if sum(~isnan(IAGOS.(Fields{iField}))) < 2; 
+      %not enough good data, drop the field
+      IAGOS = rmfield(IAGOS,Fields{iField});
+      continue
+    end 
     
-    IAGOS.(Fields{iField}) = interp1(OldTime,IAGOS.(Fields{iField}),NewTime);
+    IAGOS.(Fields{iField}) = interp1gap(OldTime,IAGOS.(Fields{iField}), ...
+                                        NewTime,Input.MaxTimeGap);
+                                   
     
   end
   
@@ -237,8 +297,7 @@ else
   Fields = fieldnames(IAGOS);  
   for iField=1:1:numel(Fields)
     if strcmp(Fields{iField},'MetaData'); continue; end
-    
-    IAGOS.(Fields{iField}) = interp1(dxS,IAGOS.(Fields{iField}),dx2);
+    IAGOS.(Fields{iField}) = interp1gap(dxS,IAGOS.(Fields{iField}),dx2,Input.MaxSpaceGap);
     
   end
   
@@ -260,6 +319,8 @@ b = circshift(a,1,2);
 IAGOS.dx = nph_haversine(a',b');
 IAGOS.dx([1,end])  = 0;
 clear a b
+
+IAGOS.dx = cumsum(IAGOS.dx);
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% identify "cruises" in the data
