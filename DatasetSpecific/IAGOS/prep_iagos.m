@@ -48,7 +48,7 @@ addParameter(p,'CruiseWindow',25,CheckWindow);  %25 time steps
 %maximum values of space or time to interpolate over
 %only the relevant one will be used
 addParameter(p,'MaxSpaceGap',50,CheckPositive);  %km
-addParameter(p,'MaxTimeGap',240,CheckPositive);  %seconds
+addParameter(p,'MaxTimeGap',240./60./60./24,CheckPositive);  %days
 
 
 %parse the inputs, and tidy up
@@ -185,8 +185,8 @@ clear llidx iX Lon Lat idx NextLon NextLat NewLon NewLat
 
 %I found at least one record with a negative time step. If these exist
 %in the data, then sort everything into order
-if min(diff(IAGOS.Time)) < 0;
 
+if min(diff(IAGOS.Time)) < 0;
   [~,order] = sort(IAGOS.Time,'ascend');
   
   Fields = fieldnames(IAGOS);
@@ -201,22 +201,28 @@ if min(diff(IAGOS.Time)) < 0;
 end
   
 
-%occasionally we have duplicate times. if so, shift by a very small amount
-%to have some kind of safe interpolation sequence
+%occasionally we have duplicate times. if so, shift by a
+%small amount to have some kind of safe interpolation sequence
 Bad = find(diff(IAGOS.Time) == 0);
 if numel(Bad) ~= 0;
   
+
   %add the smallest possible increase in time to each one, then iterate
   %until it's true of all points
-  Done = 0;
-  while Done == 0;
-    Bad = find(diff(IAGOS.Time) == 0);
-    IAGOS.Time(Bad(1)) = IAGOS.Time(Bad(1)) + realmin('single');
-    if numel(diff(IAGOS.Time) == 0); Done = 1; end
+  %this may pushing a hump along the whole track, but the net effect will
+  %be at worst an additional 1/100 second for each duplicate
+  while numel(Bad) ~= 0
+    
+    for iX = 1:1:numel(Bad)
+      IAGOS.Time(Bad(iX)) = IAGOS.Time(Bad(iX)) + 1.15741e-7; %1/100 second 
+    end
+
+    Bad = find(diff(IAGOS.Time) <= 0 )+1;
+    
   end
 end
-clear Done Bad
 
+clear Bad iX
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% apply error flags
@@ -286,7 +292,7 @@ if Input.SpaceSamplingRate ~= 1;
     end 
 
     IAGOS.(Fields{iField}) = interp1gap(OldTime,IAGOS.(Fields{iField}), ...
-                                        NewTime,Input.MaxTimeGap);
+                                        sort(NewTime,'asc'),Input.MaxTimeGap);
 
   end
   
