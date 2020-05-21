@@ -214,7 +214,7 @@ if numel(Bad) ~= 0;
   while numel(Bad) ~= 0
     
     for iX = 1:1:numel(Bad)
-      IAGOS.Time(Bad(iX)) = IAGOS.Time(Bad(iX)) + 1.15741e-7; %1/100 second 
+      IAGOS.Time(Bad(iX)) = IAGOS.Time(Bad(iX)) + 1.15741e-6; %1/10 second 
     end
 
     Bad = find(diff(IAGOS.Time) <= 0 )+1;
@@ -223,6 +223,7 @@ if numel(Bad) ~= 0;
 end
 
 clear Bad iX
+
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% apply error flags
@@ -378,7 +379,14 @@ if numel(Starts) ~= numel(Ends); Ends = Ends(2:end); end %cross-check for sanity
 
 %these are the starts and ends of the cruises
 %split the data up
-csize = Ends-Starts+1;
+try
+  csize = Ends-Starts+1;
+catch; 
+  %very rare edge case that I haven't been able to pin down and only occurs
+  %once in the data record - just drop the last segment
+  Ends = Ends(1:1:numel(Starts));
+  csize = Ends-Starts+1;
+end
 
 Cruises = NaN(numel(Starts),max(csize));
 for iCruise=1:1:numel(Starts);
