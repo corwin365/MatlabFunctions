@@ -45,6 +45,9 @@ addParameter(p,'SpaceSamplingRate',false,@islogical);
 %time window for the above change (in units of SamplingRate, above)
 addParameter(p,'CruiseWindow',25,CheckWindow);  %25 time steps
 
+%minimum number of distinct points in a cruise (in units of SamplingRate, above)
+addParameter(p,'CruiseMinLength',25,CheckWindow);  %25 time steps
+
 %maximum values of space or time to interpolate over
 %only the relevant one will be used
 addParameter(p,'MaxSpaceGap',50,CheckPositive);  %km
@@ -352,7 +355,6 @@ IAGOS.dx = cumsum(IAGOS.dx);
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 
-         
 %derivative of altitude
 try
   dz = [diff(IAGOS.baro_alt_AC),0]; %first choice of altitude metric
@@ -367,32 +369,27 @@ dz = smooth(dz,Input.CruiseWindow).*Input.CruiseWindow;
 %take absolute value, as we're looking for discontinuities, not signs
 dz = abs(dz);
 
-%create a binary mask - 0 isgood, 1 is bad (during or near a height change)
+%create a binary mask - 0 is good, 1 is bad (during or near a height change)
 Track = zeros(size(dz)); Track(dz >= Input.CruiseDz) = 1;
 
-%and then divide the good bits into separate sequences seperated by
-%the bad bits. Remember that the plane will START AND END in a BAD
-%state, as it has to get to and from ground level.
-Starts = find(diff(Track) == -1); Starts = Starts(1:end-1);%last one is the end of the final descent
-Ends   = find(diff(Track) ==  1);
-if numel(Starts) ~= numel(Ends); Ends = Ends(2:end); end %cross-check for sanity, as some have a bobble up and down at the start that triggers the end detector
+%divide up into sequences of good data
+Good = find(Track == 0);
+Disco = find(diff(Good) > 1);
+Starts = [Good(1);Good(Disco+1)];
+Ends   = [Good(Disco);Good(end)];
 
-%these are the starts and ends of the cruises
-%split the data up
-try
-  csize = Ends-Starts+1;
-catch; 
-  %very rare edge case that I haven't been able to pin down and only occurs
-  %once in the data record - just drop the last segment
-  Ends = Ends(1:1:numel(Starts));
-  csize = Ends-Starts+1;
-end
 
-Cruises = NaN(numel(Starts),max(csize));
+Cruises = NaN(numel(Starts),max(Ends-Starts)+1);
 for iCruise=1:1:numel(Starts);
-  Cruises(iCruise,1:csize(iCruise)) = Starts(iCruise):1:Ends(iCruise);
+  x = Starts(iCruise):1:Ends(iCruise);
+  Cruises(iCruise,1:numel(x)) = x;
 end
-clear iCruise Starts Ends Track dz csize
+
+%remove any cruises that are too short
+Len = sum(~isnan(Cruises),2);
+Cruises(Len < Input.CruiseMinLength,:) = [];
+
+clear iCruise Starts Ends Track dz x Disco Good Len
 
 IAGOS.Cruises = Cruises; clear Cruises
 
