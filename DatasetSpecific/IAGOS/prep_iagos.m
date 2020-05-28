@@ -299,6 +299,19 @@ if Input.SpaceSamplingRate ~= 1;
                                         sort(NewTime,'asc'),Input.MaxTimeGap);
 
   end
+
+  %the above may insert a line in the middle of a transit over the dateline
+  %near the prime meridian. if so, remove this point
+  dx = nph_haversine([IAGOS.lat;IAGOS.lon]',circshift([IAGOS.lat;IAGOS.lon]',1,1));
+  bad = find(dx > 10000); %if we've jumped 10000km between points, it aint good...
+  if numel(bad) > 0;
+  for iField=1:1:numel(Fields)
+    if strcmp(Fields{iField},'MetaData'); continue; end
+    F = IAGOS.(Fields{iField});
+    F(bad) = [];
+    IAGOS.(Fields{iField}) = F;
+  end
+  clear dx bad F iField
   
   IAGOS.OriginalTime = OldTime;
 
