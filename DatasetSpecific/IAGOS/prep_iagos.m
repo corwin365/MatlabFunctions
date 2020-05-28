@@ -333,6 +333,7 @@ end
 
 %the above may insert a line in the middle of a transit over the dateline
 %near the prime meridian. if so, remove this point
+Fields = fieldnames(IAGOS); 
 dx = nph_haversine([IAGOS.lat;IAGOS.lon]',circshift([IAGOS.lat;IAGOS.lon]',1,1));
 bad = find(dx > 10000); %if we've jumped 10000km between points, it aint good...
 if numel(bad) > 0;
@@ -343,7 +344,7 @@ if numel(bad) > 0;
     IAGOS.(Fields{iField}) = F;
   end
 end
-clear dx bad F iField
+clear dx bad F iField Fields
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% travel distance (in km)
