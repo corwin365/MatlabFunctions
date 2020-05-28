@@ -286,36 +286,21 @@ if Input.SpaceSamplingRate ~= 1;
   OldTime = IAGOS.Time;
   NewTime = min(IAGOS.Time): Input.SamplingRate : max(IAGOS.Time);
   Fields = fieldnames(IAGOS);
-
+  
   for iField=1:1:numel(Fields)
     if strcmp(Fields{iField},'MetaData'); continue; end
-    if sum(~isnan(IAGOS.(Fields{iField}))) < 2; 
+    if sum(~isnan(IAGOS.(Fields{iField}))) < 2;
       %not enough good data, drop the field
       IAGOS = rmfield(IAGOS,Fields{iField});
       continue
-    end 
-
+    end
+    
     IAGOS.(Fields{iField}) = interp1gap(OldTime,IAGOS.(Fields{iField}), ...
                                         sort(NewTime,'asc'),Input.MaxTimeGap);
-
   end
-
-  %the above may insert a line in the middle of a transit over the dateline
-  %near the prime meridian. if so, remove this point
-  dx = nph_haversine([IAGOS.lat;IAGOS.lon]',circshift([IAGOS.lat;IAGOS.lon]',1,1));
-  bad = find(dx > 10000); %if we've jumped 10000km between points, it aint good...
-  if numel(bad) > 0;
-  for iField=1:1:numel(Fields)
-    if strcmp(Fields{iField},'MetaData'); continue; end
-    F = IAGOS.(Fields{iField});
-    F(bad) = [];
-    IAGOS.(Fields{iField}) = F;
-  end
-  clear dx bad F iField
-  
-  IAGOS.OriginalTime = OldTime;
-
-  clear OldTime NewTime iField Fields
+    IAGOS.OriginalTime = OldTime;
+    
+    clear OldTime NewTime iField Fields
 
 else
   %%%%%%%%%%%%%%%%%%
@@ -345,6 +330,20 @@ else
   clear iField Fields dxS dx2
   
 end
+
+%the above may insert a line in the middle of a transit over the dateline
+%near the prime meridian. if so, remove this point
+dx = nph_haversine([IAGOS.lat;IAGOS.lon]',circshift([IAGOS.lat;IAGOS.lon]',1,1));
+bad = find(dx > 10000); %if we've jumped 10000km between points, it aint good...
+if numel(bad) > 0;
+  for iField=1:1:numel(Fields)
+    if strcmp(Fields{iField},'MetaData'); continue; end
+    F = IAGOS.(Fields{iField});
+    F(bad) = NaN;
+    IAGOS.(Fields{iField}) = F;
+  end
+end
+clear dx bad F iField
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% travel distance (in km)
