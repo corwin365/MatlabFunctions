@@ -50,6 +50,8 @@ function [A, bcol] = print2array(fig, res, renderer, gs_options)
 % 28/05/15: Fixed issue #69: patches with LineWidth==0.75 appear wide (internal bug in Matlab's print() func)
 % 07/07/15: Fixed issue #83: use numeric handles in HG1
 % 11/12/16: Fixed cropping issue reported by Harry D.
+% 29/09/18: Fixed issue #254: error in print2array>read_tif_img
+% 22/03/20: Alert if ghostscript.m is required but not found on Matlab path
 %}
 
     % Generate default input arguments, if needed
@@ -65,8 +67,8 @@ function [A, bcol] = print2array(fig, res, renderer, gs_options)
     px = get(fig, 'Position');
     set(fig, 'Units', old_mode);
     npx = prod(px(3:4)*res)/1e6;
-    if npx > 100
-        % 100M pixels or larger!
+    if npx > 30
+        % 30M pixels or larger!
         warning('MATLAB:LargeImage', 'print2array generating a %.1fM pixel image. This could be slow and might also cause memory problems.', npx);
     end
     % Retrieve the background colour
@@ -108,6 +110,10 @@ function [A, bcol] = print2array(fig, res, renderer, gs_options)
             [A, err, ex] = read_tif_img(fig, res_str, renderer, tmp_nam);
             if err, rethrow(ex); end
         catch  % error - try to print to EPS and then using Ghostscript to TIF
+            % Ensure that ghostscript() exists on the Matlab path
+            if ~exist('ghostscript','file') && isempty(which('ghostscript'))
+                error('export_fig:print2array:ghostscript', 'The ghostscript.m function is required by print2array.m. Install the complete export_fig package from https://www.mathworks.com/matlabcentral/fileexchange/23629-export_fig or https://github.com/altmany/export_fig')
+            end
             % Print to eps file
             if isTempDirOk
                 tmp_eps = [tempname '.eps'];
@@ -207,6 +213,7 @@ end
 
 % Function to create a TIF image of the figure and read it into an array
 function [A, err, ex] = read_tif_img(fig, res_str, renderer, tmp_nam)
+    A =  [];  % fix for issue #254
     err = false;
     ex = [];
     % Temporarily set the paper size
