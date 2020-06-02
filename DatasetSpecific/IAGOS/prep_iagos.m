@@ -1,4 +1,4 @@
-function [IAGOS,Error] = prep_iagos(FilePath,varargin)
+function IAGOS = prep_iagos(FilePath,varargin)
 
 
 %load an IAGOS netCDF file and add:
@@ -66,14 +66,13 @@ Input = p.Results;
 %tidy up
 clear CheckWindow CheckPositive p varargin
 
-
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% load the data
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 %check file exists, and fail if not
 if ~exist(FilePath)
-  Error = 'No file found';
+  disp('No file found');
   IAGOS = [];
   return
 end
@@ -97,6 +96,7 @@ clear Variables VarIdx VarIdx2
 %hence, convert the dates
 IAGOS.Time = datenum(Units(15:end),'yyyy-mm-dd HH:MM:SS') + IAGOS.UTC_time./60./60./24;
 clear Units
+
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% NaNify actively bad data
@@ -276,7 +276,6 @@ clear iField Vars
 %% interpolate to constant time sampling or constant space sampling
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-
 if Input.SpaceSamplingRate ~= 1;
 
   %%%%%%%%%%%%%%%%%%
@@ -306,12 +305,12 @@ else
   %%%%%%%%%%%%%%%%%%
   %space resampling
   %%%%%%%%%%%%%%%%%%
-  
+ 
   %work out distance between each point
   x = [IAGOS.lat,IAGOS.lon];
   y = circshift(x,1,1);
   dx = nph_haversine(x,y);
-  dx([1,end]); %assume first point spacing is same as second, as can't compute otherwise
+  dx(1) = dx(2); %assume first point spacing is same as second, as can't compute otherwise
   
   %and hence stepwise distance along-track
   dxS = dx; for iX=2:1:numel(dxS); dxS(iX) = dxS(iX-1)+dxS(iX); end
