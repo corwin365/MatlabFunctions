@@ -15,7 +15,6 @@ if nargin < 3; Dimension = 1; end
 if ~exist('VarsToIgnore','var'); VarsToIgnore = {' '}; end
 
 
-%concatenate the remaining fields
 Fields = fieldnames(StructA);
 for iField=1:1:numel(Fields);
   
@@ -29,11 +28,10 @@ for iField=1:1:numel(Fields);
   %if the variables are not the same size in the non-specified dimensions,
   %then nan-pad them to match
   szF = size(F); szG = size(G); 
-  if numel(szF) < Dimension; 
-    aa = ones(Dimension,1); aa(1:numel(szF)) = szF; szF = aa;
-    aa = ones(Dimension,1); aa(1:numel(szG)) = szG; szG = aa; 
-  end
-  szF2 = szF; szF2(Dimension) = []; szG2 = szG;  szG2(Dimension) = [];
+  if numel(szF) < Dimension; aa = ones(Dimension,1); aa(1:numel(szF)) = szF; szF = aa; end
+  if numel(szG) < Dimension; aa = ones(Dimension,1); aa(1:numel(szG)) = szG; szG = aa; end
+  szF2 = szF; szF2(Dimension) = []; 
+  szG2 = szG; szG2(Dimension) = [];
   if ~isequal(szF,szG)
     
     %work out the size of the new array
