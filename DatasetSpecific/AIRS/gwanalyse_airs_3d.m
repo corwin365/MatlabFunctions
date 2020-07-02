@@ -6,6 +6,7 @@ function [ST,Airs,Error,ErrorInfo] = gwanalyse_airs_3d(Airs,varargin)
 %generalised function to ST AIRS data prepared by prep_airs_3d
 %
 %Corwin Wright, c.wright@bath.ac.uk, 10/AUG/2019
+%extensively modified 07/JUL/2020 to add "2D+1" option, using phase differences to compute Lz
 %
 %IMPORTANT: this routine does not allow most of the optional flags of
 %nph_ndst (e.g. Scales, Full Mode) - only the NUMBER of scales and c can be
@@ -17,6 +18,7 @@ function [ST,Airs,Error,ErrorInfo] = gwanalyse_airs_3d(Airs,varargin)
 %
 %REQUIRES the following external functions:
 % nph_ndst
+% gwanalyse_airs_2d (only if we request 2D+1 output)
 %
 %INCLUDES the following functions written by others:
 % Neil Hindley: nph_haversine,scale_height (n.hindley@bath.ac.uk)
@@ -61,6 +63,7 @@ function [ST,Airs,Error,ErrorInfo] = gwanalyse_airs_3d(Airs,varargin)
 %    c               (array, [0.25,0.25,0.25])  s-transform c parameter
 %    MinWaveLength   (array,   [1,1,1].*99e99)  minimum output wavelength
 %    MaxWaveLength   (array,          [0,0,0])  maximum output wavelength
+%    TwoDPlusOne     (logical,          false)  *ADDITIONALLY* compute vertical wavelengths with 2D+1 method
 %
 %
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -105,6 +108,9 @@ addParameter(p,'c',[0.25,0.25,0.25],CheckSpacing);  %default values
 %HeightScaling is logical
 addParameter(p,'HeightScaling',true,@islogical);  %assumes we want to scale the data with height for STing (put back afterwards)
 
+%TwoDPlusOne is logical
+addParameter(p,'TwoDPlusOne',true,@islogical);  %assumes we *son't* want to compute wavelengths via 2D+1 (this is much slower, but often more accurate)
+
 %MaxWaveLength must be an positive real number
 CheckLambda = @(x) validateattributes(x,{'numeric'},{'>=',0});
 addParameter(p,'MaxWaveLength',[1,1,1].*99e99,CheckLambda);  %crazy-large default
@@ -143,7 +149,25 @@ clear CheckNScales CheckZRange CheckSpacing CheckLambda
 InZRange = find(Airs.ret_z >= Input.ZRange(1) ...
               & Airs.ret_z <= Input.ZRange(2));
 
-%required variables
+            
+%if we're using the 2D+1 method, we'l need some extra levels for phase fitting   
+%retain these in a separate array - they'll be thrown away after use
+if Input.TwoDPlusOne; 
+  if min(InZRange) > 1;
+    Extra.Bottom.ret_z    = squeeze(Airs.ret_z(       min(InZRange)-1));
+    Extra.Bottom.Tp       = squeeze(Airs.Tp(      :,:,min(InZRange)-1));
+    Extra.Bottom.BG       = squeeze(Airs.BG(      :,:,min(InZRange)-1));
+    Extra.Bottom.ret_temp = squeeze(Airs.ret_temp(:,:,min(InZRange)-1));
+  end
+  if max(InZRange) < numel(Airs.ret_z);    
+    Extra.Top.ret_z    = squeeze(Airs.ret_z(       min(InZRange)+1));
+    Extra.Top.Tp       = squeeze(Airs.Tp(      :,:,min(InZRange)+1));
+    Extra.Top.BG       = squeeze(Airs.BG(      :,:,min(InZRange)+1));
+    Extra.Top.ret_temp = squeeze(Airs.ret_temp(:,:,min(InZRange)+1));
+  end
+end
+
+%Safely stockpiled. Ok, trim down the variables for normal use
 Airs.ret_z    = Airs.ret_z(       InZRange);
 Airs.Tp       = Airs.Tp(      :,:,InZRange);
 Airs.BG       = Airs.BG(      :,:,InZRange);
@@ -232,6 +256,21 @@ ST = nph_ndst(Airs.Tp,                                ...
               'minwavelengths', Input.MinWaveLength);
 clear PointSpacing
 
+%if requested, also use the 2D+1 method to compute vertical wavelength
+%outputs will be duplicates of the standard outputs, with a '_2p1' suffix to the varname
+if Input.TwoDPlusOne; 
+
+  %generate the new fields from the 2D+1 ST
+  NewFields = get_2dp1_lambdaz(Airs,Extra,Input); 
+
+  %add those fields to the main ST array
+  Fields = fieldnames(NewFields);
+  for iF=1:1:numel(Fields);
+    ST.([Fields{iF},'_2dp1']) = NewFields.(Fields{iF});
+  end; clear iF Fields NewFields
+end
+
+
 %undo height scaling
 if Input.HeightScaling;
   Airs.Tp = Airs.Tp ./ CFac;
@@ -239,6 +278,11 @@ if Input.HeightScaling;
   ST.HA   = ST.HA   ./ CFac;
   ST.R    = ST.R    ./ CFac;
   ST.HR   = ST.HR   ./ CFac;
+  
+  if Input.TwoDPlusOne; 
+    ST.A_2dp1    = ST.A_2dp1    ./ CFac;
+  end
+  
   clear CFac
 end
 
@@ -277,6 +321,7 @@ ST.l = ST.kh .* cosd(ang_north);
 
 %finally, m 
 ST.m = ST.F3;
+
 
 clear sz ang_at az_at ang_north xt_mid
 
@@ -390,6 +435,104 @@ function [c] = quadadd(a,b)
 
 
 c = sqrt(a.^2 + b.^2);
+return
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% 2D+1 st
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+function NewFields = get_2dp1_lambdaz(Airs,Extra,Input)
+
+
+  %glue the extra levels we retained to the top and bottom
+  Vars = {'Tp','ret_z','BG','ret_temp'}; 
+  Dims = [3,1,3,3];
+  for iVar=1:1:numel(Vars)
+    Working.(Vars{iVar}) = Airs.(Vars{iVar});
+    if isfield(Extra,'Bottom'); Working.(Vars{iVar}) = cat(Dims(iVar),Extra.Bottom.(Vars{iVar}),Working.(Vars{iVar}));end;
+    if isfield(Extra,'Top');    Working.(Vars{iVar}) = cat(Dims(iVar),Working.(Vars{iVar}),Extra.Top.(Vars{iVar}));  end;
+    Airs.(Vars{iVar}) = Working.(Vars{iVar});
+  end; clear iVar Working Vars Dims
+
+  %take the 2D S-Transform for each level, and retain the information we need later
+  Vars = {'F1','F2','A','ST','idx_F1','idx_F2','k','l'};
+  for iLevel=1:1:numel(Airs.ret_z)
+    
+    %do the 2DST
+    ST = gwanalyse_airs_2d(Airs,Airs.ret_z(iLevel),'FullST',true,'c',Input.c(1:2), ...
+                           'MaxWavelength', Input.MaxWaveLength,'MinWavelength', Input.MinWaveLength);
+    
+    %find the **indices** of the fitted horizontal waves
+    F1s = unique(ST.F1); idx_F1 = ST.F1; for iF=1:1:numel(F1s); idx_F1(ST.F1 == F1s(iF)) = closest(ST.freqs{1},F1s(iF)); end
+    F2s = unique(ST.F2); idx_F2 = ST.F2; for iF=1:1:numel(F2s); idx_F2(ST.F2 == F2s(iF)) = closest(ST.freqs{2},F2s(iF)); end
+    ST.idx_F1 = idx_F1; ST.idx_F2 = idx_F2; 
+    clear F1s F2s iF idx_F1 idx_F2
+    
+    %store for later. Append in dimension 5 as that's safe for everything ane makes the code cleaner, we can fix it later/
+    for iVar=1:1:numel(Vars);
+      if iLevel == 1; 
+        Store.(Vars{iVar}) = ST.(Vars{iVar}); 
+        freqs = ST.freqs; %we need freqs later, but only one copy as it's the same each loop
+      else
+        Store.(Vars{iVar}) = cat(5,Store.(Vars{iVar}),ST.(Vars{iVar}));
+      end
+    end
+  end; clear iLevel ST iVar
+  
+  %trim the dimensionality of all except Store.ST
+  for iVar=1:1:numel(Vars)
+    if strcmp(Vars{iVar},'ST'); continue; end
+    Store.(Vars{iVar}) = permute(Store.(Vars{iVar}),[1,2,5,3,4]);
+  end
+  clear iLevel iVar
+
+  %produce complex cospectra
+  CC = Store.ST.*NaN;
+  for iLevel=2:1:numel(Airs.ret_z)-1
+    CC(:,:,:,:,iLevel) = Store.ST(:,:,:,:,iLevel-1) .* conj(Store.ST(:,:,:,:,iLevel+1));
+  end; clear iLevel
+
+  %pull the peak-amplitude wavelength signals we want out of the array
+  %there's definitely a way to vectorise this, but it's so fast it's not worth the hassle
+  sz = size(CC);
+  for iX=1:1:sz(3); for iY=1:1:sz(4); for iZ=1:1:sz(5)
+    CC(1,1,iX,iY,iZ) = CC(Store.idx_F1(iX,iY,iZ),Store.idx_F1(iX,iY,iZ),iX,iY,iZ);
+  end; end; end
+  clear iX iY iZ
+  CC = squeeze(CC(1,1,:,:,:));
+  
+  %convert each levels CC values to covarying phase between the two voxels at peak wavelength
+  AlldP = angle(CC);  clear CC
+  
+  %convert phase change to wavelength
+  sz = size(AlldP);
+  dZ = [diff(Airs.ret_z)+ circshift(diff(Airs.ret_z),1);0]; %the levels that this makes wonky will be removed later
+  Lambda = permute(repmat(dZ,1,sz(1),sz(2)),[2,3,1])./AlldP.*2*pi;
+  clear sz AlldP dZ
+  
+  %force sign convention 
+  Negative = find(Lambda < 0);
+  Lambda(  Negative) = -1.*Lambda(  Negative);
+  Store.F1(Negative) = -1.*Store.F1(Negative);
+  Store.F2(Negative) = -1.*Store.F2(Negative);
+  Store.k( Negative) = -1.*Store.k( Negative);
+  Store.l( Negative) = -1.*Store.l( Negative);
+
+  %drop the extra levels we used for the phase fitting, and prepare to return
+  Vars = {'F1','F2','F3','k','l','A','m'};
+  for iVar=1:1:numel(Vars)
+    if strcmp(Vars{iVar},'F3') | strcmp(Vars{iVar},'m'); V = 1./Lambda;
+    else V = Store.(Vars{iVar}); 
+    end
+    
+    if isfield(Extra,'Bottom'); V = V(:,:,2:end); end
+    if isfield(Extra,'Top');    V = V(:,:,1:end-1); end
+    
+    NewFields.(Vars{iVar}) = V;
+  end; clear iVar V
+
 return
 
 
