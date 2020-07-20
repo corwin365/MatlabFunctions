@@ -261,7 +261,8 @@ clear PointSpacing
 if Input.TwoDPlusOne; 
 
   %generate the new fields from the 2D+1 ST
-  NewFields = get_2dp1_lambdaz(Airs,Extra,Input); 
+%   NewFields = get_2dp1_lambdaz(Airs,Extra,Input);   
+  NewFields = get_2dp1_lambdaz_v2(Airs,ST,Extra,Input); 
 
   %add those fields to the main ST array
   Fields = fieldnames(NewFields);
@@ -279,9 +280,9 @@ if Input.HeightScaling;
   ST.R    = ST.R    ./ CFac;
   ST.HR   = ST.HR   ./ CFac;
   
-  if Input.TwoDPlusOne; 
-    ST.A_2dp1    = ST.A_2dp1    ./ CFac;
-  end
+% %   if Input.TwoDPlusOne; 
+% %     ST.A_2dp1    = ST.A_2dp1    ./ CFac;
+% %   end
   
   clear CFac
 end
@@ -529,5 +530,97 @@ function NewFields = get_2dp1_lambdaz(Airs,Extra,Input)
   end; clear iVar V
 
 return
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% 2D+1 st, version 2
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+function NewFields = get_2dp1_lambdaz_v2(Airs,ST3D,Extra,Input)
+
+
+  %glue the extra levels we retained to the top and bottom
+  Vars = {'Tp','ret_z','BG','ret_temp'}; 
+  Dims = [3,1,3,3];
+  for iVar=1:1:numel(Vars)
+    Working.(Vars{iVar}) = Airs.(Vars{iVar});
+    if isfield(Extra,'Bottom'); Working.(Vars{iVar}) = cat(Dims(iVar),Extra.Bottom.(Vars{iVar}),Working.(Vars{iVar}));end;
+    if isfield(Extra,'Top');    Working.(Vars{iVar}) = cat(Dims(iVar),Working.(Vars{iVar}),Extra.Top.(Vars{iVar}));  end;
+    Airs.(Vars{iVar}) = Working.(Vars{iVar});
+  end; clear iVar Working Vars Dims
+
+  %take the 2D S-Transform for each level, and retain the information we need later
+  for iLevel=1:1:numel(Airs.ret_z)
+    
+    %do the 2DST
+    ST = gwanalyse_airs_2d(Airs,Airs.ret_z(iLevel),'FullST',true,'c',Input.c(1:2), ...
+                           'MaxWavelength', Input.MaxWaveLength,'MinWavelength', Input.MinWaveLength);
+
+    %store for later.
+    if iLevel == 1;
+      Store.ST = ST.ST;
+      freqs = ST.freqs; %we need freqs later, but only one copy as it's the same each loop
+    else
+      Store.ST = cat(5,Store.ST,ST.ST);
+    end
+  end; clear iLevel ST iVar
+  
+  %produce complex cospectra
+  CC = Store.ST.*NaN;
+  for iLevel=2:1:numel(Airs.ret_z)-1
+    CC(:,:,:,:,iLevel) = Store.ST(:,:,:,:,iLevel-1) .* conj(Store.ST(:,:,:,:,iLevel+1));
+  end; clear iLevel
+
+  %drop the extra levels we used for the phase fitting
+  dZ = [diff(Airs.ret_z)+ circshift(diff(Airs.ret_z),1);0];
+  if isfield(Extra,'Bottom'); 
+    CC = CC(:,:,:,:,numel(Extra.Bottom.ret_z)+1:end);
+    dZ = dZ(numel(Extra.Bottom.ret_z)+1:end);
+  end
+  if isfield(Extra,'Top');    
+    CC = CC(:,:,:,:,1:end-numel(Extra.Top.ret_z)); 
+    dZ = dZ(1:end-numel(Extra.Top.ret_z));
+  end
+    
+  %find the nearest wavelength combination to the 3DST fits
+  F1_3D = ST3D.F1;  idx_F1_3D = NaN.*F1_3D;
+  F2_3D = ST3D.F2;  idx_F2_3D = NaN.*F2_3D;
+  for iPoint = 1:1:numel(F1_3D);
+    idx_F1_3D(iPoint) = closest(freqs{1},F1_3D(iPoint));
+    idx_F2_3D(iPoint) = closest(freqs{2},F2_3D(iPoint));
+  end; clear iPoint F1_3D F2_3D
+
+  %retain the phase difference of these fits
+  sz = size(CC);
+  CC        = reshape(CC,sz(1),sz(2),sz(3)*sz(4),sz(5));
+  idx_F1_3D = reshape(idx_F1_3D,sz(3)*sz(4),sz(5));
+  idx_F2_3D = reshape(idx_F2_3D,sz(3)*sz(4),sz(5));
+  PhiStore  = NaN(sz(3)*sz(4),sz(5));
+  for iLevel=1:1:sz(5)
+    for iPoint=1:1:sz(3)*sz(4);
+      Phi = CC(idx_F1_3D(iPoint,iLevel),idx_F1_3D(iPoint,iLevel),iPoint,iLevel);
+      PhiStore(iPoint,iLevel) = Phi;
+    end
+  end
+  PhiStore = reshape(PhiStore,sz(3),sz(4),sz(5));
+  clear sz CC idx_F1_3D idx_F2_3D iLevel iPoint Phi CC
+
+
+  %convert each levels CC values to covarying phase between the two voxels at peak wavelength
+  AlldP = angle(PhiStore);  clear PhiStore
+  
+  %convert phase change to wavelength
+  sz = size(AlldP);
+  Lambda = permute(repmat(dZ,1,sz(1),sz(2)),[2,3,1])./AlldP.*2*pi;
+  clear sz AlldP dZ
+
+
+  %and return
+  NewFields.F3 = 1./Lambda;
+  NewFields.m  = 1./Lambda;
+
+return
+
 
 
