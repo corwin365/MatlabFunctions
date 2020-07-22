@@ -63,6 +63,7 @@ function [ST,Airs,Error,ErrorInfo] = gwanalyse_airs_3d(Airs,varargin)
 %    c               (array, [0.25,0.25,0.25])  s-transform c parameter
 %    MinWaveLength   (array,   [1,1,1].*99e99)  minimum output wavelength
 %    MaxWaveLength   (array,          [0,0,0])  maximum output wavelength
+%    NotAirsData     (logical,          false)  overrides some of the sanity checks on AIRS data formatting
 %    TwoDPlusOne     (logical,          false)  *ADDITIONALLY* compute vertical wavelengths with 2D+1 method.
 %    TwoDPlusOne_ind (logical,          false)  *ADDITIONALLY* compute vertical wavelengths with 2D+1 method, using independent fits rather than the 3DST fits
 %
@@ -79,6 +80,14 @@ ErrorInfo = '';
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% input parsing
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%this function is written for AIRS data, but can be used for non-AIRS data
+%in this case, some sanity checks below need to be overridden
+%result: Status = 0 to apply the checks, otherwise do not
+Status = find(strcmp(varargin,'NotAirsData') ~= 0);
+if numel(Status) ~= 0; Status = varargin{Status+1}; else Status = 0; end
+
+
 
 %create input parser
 %%%%%%%%%%%%%%%%%%%%%%%
@@ -98,7 +107,9 @@ CheckNScales = @(x) validateattributes(x,{'numeric'},{'nonnegative','integer'});
 addParameter(p,'NScales',1000,CheckNScales);  %assume 1000 scales unless specified  
 
 %ZRange must be an array with two positive values between 0 and 90
-CheckZRange = @(x) validateattributes(x,{'numeric'},{'size',[1,2],'>=',0,'<=',90});
+if Status ==0; CheckZRange = @(x) validateattributes(x,{'numeric'},{'size',[1,2],'>=',   0,'<=', 90});
+else           CheckZRange = @(x) validateattributes(x,{'numeric'},{'size',[1,2],'>=',-Inf,'<=',Inf});
+end
 addParameter(p,'ZRange',[20,60],CheckZRange);  %assumes only the 3km regular step range
 
 %Spacing and c must be arrays with three positive values 
@@ -108,6 +119,9 @@ addParameter(p,'c',[0.25,0.25,0.25],CheckSpacing);  %default values
 
 %HeightScaling is logical
 addParameter(p,'HeightScaling',true,@islogical);  %assumes we want to scale the data with height for STing (put back afterwards)
+
+%NotAirsData is logical
+addParameter(p,'NotAirsData',false,@islogical);  %assumes we are feeding the routine AIRS data
 
 %TwoDPlusOne is logical
 addParameter(p,'TwoDPlusOne',    true,@islogical);  %assumes we *don't* want to compute wavelengths via 2D+1 (this is much slower, but often more accurate)
@@ -124,8 +138,8 @@ addParameter(p,'MinWaveLength',[1,1,1].*0,CheckLambda);  %zero default
 %parse the inputs, and tidy up
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-%parse inputs
-parse(p,Airs,varargin{:})
+%ok, do the parsing!
+parse(p,Airs,varargin{:});
 
 %pull out the contents into struct "Inputs", used throughout rest of routine
 Input = p.Results;
@@ -133,14 +147,6 @@ Input = p.Results;
 %tidy up
 clearvars -except Input ST Airs Error ErrorInfo
 clear CheckNScales CheckZRange CheckSpacing CheckLambda
-
-
-
-
-
-
-
-
 
 
 
@@ -154,18 +160,22 @@ InZRange = find(Airs.ret_z >= Input.ZRange(1) ...
             
 %if we're using the 2D+1 method, we'l need some extra levels for phase fitting   
 %retain these in a separate array - they'll be thrown away after use
-if Input.TwoDPlusOne; 
+if Input.TwoDPlusOne | Input.TwoDPlusOne_ind; 
   if min(InZRange) > 1;
     Extra.Bottom.ret_z    = squeeze(Airs.ret_z(       min(InZRange)-1));
     Extra.Bottom.Tp       = squeeze(Airs.Tp(      :,:,min(InZRange)-1));
     Extra.Bottom.BG       = squeeze(Airs.BG(      :,:,min(InZRange)-1));
     Extra.Bottom.ret_temp = squeeze(Airs.ret_temp(:,:,min(InZRange)-1));
+  else
+    Extra.Bottom.ret_z = [];
   end
   if max(InZRange) < numel(Airs.ret_z);    
     Extra.Top.ret_z    = squeeze(Airs.ret_z(       min(InZRange)+1));
     Extra.Top.Tp       = squeeze(Airs.Tp(      :,:,min(InZRange)+1));
     Extra.Top.BG       = squeeze(Airs.BG(      :,:,min(InZRange)+1));
     Extra.Top.ret_temp = squeeze(Airs.ret_temp(:,:,min(InZRange)+1));
+  else
+    Extra.Top.ret_z = [];
   end
 end
 
@@ -176,12 +186,6 @@ Airs.BG       = Airs.BG(      :,:,InZRange);
 Airs.ret_temp = Airs.ret_temp(:,:,InZRange);
 
 clear InZRange
-
-
-
-
-
-
 
 
 
@@ -467,8 +471,16 @@ function NewFields = get_2dp1_lambdaz(Airs,Extra,Input)
   Dims = [3,1,3,3];
   for iVar=1:1:numel(Vars)
     Working.(Vars{iVar}) = Airs.(Vars{iVar});
-    if isfield(Extra,'Bottom'); Working.(Vars{iVar}) = cat(Dims(iVar),Extra.Bottom.(Vars{iVar}),Working.(Vars{iVar}));end;
-    if isfield(Extra,'Top');    Working.(Vars{iVar}) = cat(Dims(iVar),Working.(Vars{iVar}),Extra.Top.(Vars{iVar}));  end;
+    if isfield(Extra,'Bottom');
+      if numel(Extra.Bottom.ret_z) > 0;
+        Working.(Vars{iVar}) = cat(Dims(iVar),Extra.Bottom.(Vars{iVar}),Working.(Vars{iVar}));
+      end;
+    end
+    if isfield(Extra,'Top'); 
+      if numel(Extra.Top.ret_z) > 0;
+        Working.(Vars{iVar}) = cat(Dims(iVar),Working.(Vars{iVar}),Extra.Top.(Vars{iVar}));
+      end;
+    end;
     Airs.(Vars{iVar}) = Working.(Vars{iVar});
   end; clear iVar Working Vars Dims
 
@@ -523,8 +535,9 @@ function NewFields = get_2dp1_lambdaz(Airs,Extra,Input)
   AlldP = angle(CC);  clear CC
   
   %convert phase change to wavelength
-  sz = size(AlldP);
+  sz = size(Airs.ret_z); if sz(2) > sz(1); Airs.ret_z = Airs.ret_z'; end
   dZ = [diff(Airs.ret_z)+ circshift(diff(Airs.ret_z),1);0]; %the levels that this makes wonky will be removed later
+  sz = size(AlldP);
   Lambda = permute(repmat(dZ,1,sz(1),sz(2)),[2,3,1])./AlldP.*2*pi;
   clear sz AlldP dZ
   
@@ -536,6 +549,7 @@ function NewFields = get_2dp1_lambdaz(Airs,Extra,Input)
   Store.k( Negative) = -1.*Store.k( Negative);
   Store.l( Negative) = -1.*Store.l( Negative);
 
+  
   %drop the extra levels we used for the phase fitting, and prepare to return
   Vars = {'F1','F2','F3','k','l','A','m'};
   for iVar=1:1:numel(Vars)
@@ -543,8 +557,8 @@ function NewFields = get_2dp1_lambdaz(Airs,Extra,Input)
     else V = Store.(Vars{iVar}); 
     end
     
-    if isfield(Extra,'Bottom'); V = V(:,:,2:end); end
-    if isfield(Extra,'Top');    V = V(:,:,1:end-1); end
+    if isfield(Extra,'Bottom'); V = V(:,:,numel(Extra.Bottom.ret_z)+1:end); end
+    if isfield(Extra,'Top');    V = V(:,:,1:end-numel(Extra.Top.ret_z)); end
     
     NewFields.(Vars{iVar}) = V;
   end; clear iVar V
@@ -559,14 +573,21 @@ return
 
 function NewFields = get_2dp1_lambdaz_v2(Airs,ST3D,Extra,Input)
 
-
   %glue the extra levels we retained to the top and bottom
   Vars = {'Tp','ret_z','BG','ret_temp'}; 
   Dims = [3,1,3,3];
   for iVar=1:1:numel(Vars)
     Working.(Vars{iVar}) = Airs.(Vars{iVar});
-    if isfield(Extra,'Bottom'); Working.(Vars{iVar}) = cat(Dims(iVar),Extra.Bottom.(Vars{iVar}),Working.(Vars{iVar}));end;
-    if isfield(Extra,'Top');    Working.(Vars{iVar}) = cat(Dims(iVar),Working.(Vars{iVar}),Extra.Top.(Vars{iVar}));  end;
+    if isfield(Extra,'Bottom');
+      if numel(Extra.Bottom.ret_z) > 0;
+        Working.(Vars{iVar}) = cat(Dims(iVar),Extra.Bottom.(Vars{iVar}),Working.(Vars{iVar}));
+      end;
+    end
+    if isfield(Extra,'Top'); 
+      if numel(Extra.Top.ret_z) > 0;
+        Working.(Vars{iVar}) = cat(Dims(iVar),Working.(Vars{iVar}),Extra.Top.(Vars{iVar}));
+      end;
+    end;
     Airs.(Vars{iVar}) = Working.(Vars{iVar});
   end; clear iVar Working Vars Dims
 
@@ -593,14 +614,19 @@ function NewFields = get_2dp1_lambdaz_v2(Airs,ST3D,Extra,Input)
   end; clear iLevel
 
   %drop the extra levels we used for the phase fitting
+  sz = size(Airs.ret_z); if sz(2) > sz(1); Airs.ret_z = Airs.ret_z'; end
   dZ = [diff(Airs.ret_z)+ circshift(diff(Airs.ret_z),1);0];
-  if isfield(Extra,'Bottom'); 
-    CC = CC(:,:,:,:,numel(Extra.Bottom.ret_z)+1:end);
-    dZ = dZ(numel(Extra.Bottom.ret_z)+1:end);
+  if isfield(Extra,'Bottom');
+    if numel(Extra.Bottom.ret_z) > 0;
+      CC = CC(:,:,:,:,numel(Extra.Bottom.ret_z)+1:end);
+      dZ = dZ(numel(Extra.Bottom.ret_z)+1:end);
+    end
   end
-  if isfield(Extra,'Top');    
-    CC = CC(:,:,:,:,1:end-numel(Extra.Top.ret_z)); 
-    dZ = dZ(1:end-numel(Extra.Top.ret_z));
+  if isfield(Extra,'Top');
+    if numel(Extra.Top.ret_z) > 0;
+      CC = CC(:,:,:,:,1:end-numel(Extra.Top.ret_z));
+      dZ = dZ(1:end-numel(Extra.Top.ret_z));
+    end
   end
     
   %find the nearest wavelength combination to the 3DST fits
