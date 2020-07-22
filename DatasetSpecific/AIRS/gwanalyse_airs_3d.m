@@ -63,7 +63,8 @@ function [ST,Airs,Error,ErrorInfo] = gwanalyse_airs_3d(Airs,varargin)
 %    c               (array, [0.25,0.25,0.25])  s-transform c parameter
 %    MinWaveLength   (array,   [1,1,1].*99e99)  minimum output wavelength
 %    MaxWaveLength   (array,          [0,0,0])  maximum output wavelength
-%    TwoDPlusOne     (logical,          false)  *ADDITIONALLY* compute vertical wavelengths with 2D+1 method
+%    TwoDPlusOne     (logical,          false)  *ADDITIONALLY* compute vertical wavelengths with 2D+1 method.
+%    TwoDPlusOne_ind (logical,          false)  *ADDITIONALLY* compute vertical wavelengths with 2D+1 method, using independent fits rather than the 3DST fits
 %
 %
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -109,7 +110,8 @@ addParameter(p,'c',[0.25,0.25,0.25],CheckSpacing);  %default values
 addParameter(p,'HeightScaling',true,@islogical);  %assumes we want to scale the data with height for STing (put back afterwards)
 
 %TwoDPlusOne is logical
-addParameter(p,'TwoDPlusOne',true,@islogical);  %assumes we *son't* want to compute wavelengths via 2D+1 (this is much slower, but often more accurate)
+addParameter(p,'TwoDPlusOne',    true,@islogical);  %assumes we *don't* want to compute wavelengths via 2D+1 (this is much slower, but often more accurate)
+addParameter(p,'TwoDPlusOne_ind',true,@islogical);  %as above, but computes fits independently rather than using 3DST fits
 
 %MaxWaveLength must be an positive real number
 CheckLambda = @(x) validateattributes(x,{'numeric'},{'>=',0});
@@ -256,20 +258,38 @@ ST = nph_ndst(Airs.Tp,                                ...
               'minwavelengths', Input.MinWaveLength);
 clear PointSpacing
 
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %if requested, also use the 2D+1 method to compute vertical wavelength
-%outputs will be duplicates of the standard outputs, with a '_2p1' suffix to the varname
-if Input.TwoDPlusOne; 
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-  %generate the new fields from the 2D+1 ST
-%   NewFields = get_2dp1_lambdaz(Airs,Extra,Input);   
-  NewFields = get_2dp1_lambdaz_v2(Airs,ST,Extra,Input); 
-
+if     Input.TwoDPlusOne;    
+  
+  %standard version - uses fitted horizontal wavelengths from 3DST
+  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+  
+  NewFields = get_2dp1_lambdaz_v2(Airs,ST,Extra,Input);
   %add those fields to the main ST array
   Fields = fieldnames(NewFields);
   for iF=1:1:numel(Fields);
     ST.([Fields{iF},'_2dp1']) = NewFields.(Fields{iF});
   end; clear iF Fields NewFields
+
 end
+  
+if Input.TwoDPlusOne_ind;
+  
+  %alternate version - fits horizontal wavelengths independently and uses these
+  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%  
+  
+  NewFields = get_2dp1_lambdaz(Airs,Extra,Input); 
+  %add those fields to the main ST array
+  Fields = fieldnames(NewFields);
+  for iF=1:1:numel(Fields);
+    ST.([Fields{iF},'_2dp1_ind']) = NewFields.(Fields{iF});
+  end; clear iF Fields NewFields
+    
+end
+
 
 
 %undo height scaling
@@ -436,7 +456,7 @@ return
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% 2D+1 st
+%% 2D+1 st, versin 1. This computes independent horizontal wavenumber fits.
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 function NewFields = get_2dp1_lambdaz(Airs,Extra,Input)
@@ -534,7 +554,7 @@ return
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% 2D+1 st, version 2
+%% 2D+1 st, version 2. This uses the 3DST horizontal wavenumber fits.
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 function NewFields = get_2dp1_lambdaz_v2(Airs,ST3D,Extra,Input)
