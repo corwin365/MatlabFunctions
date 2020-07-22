@@ -616,14 +616,16 @@ function NewFields = get_2dp1_lambdaz_v2(Airs,ST3D,Extra,Input)
   CC        = reshape(CC,sz(1),sz(2),sz(3)*sz(4),sz(5));
   idx_F1_3D = reshape(idx_F1_3D,sz(3)*sz(4),sz(5));
   idx_F2_3D = reshape(idx_F2_3D,sz(3)*sz(4),sz(5));
-  PhiStore  = NaN(sz(3)*sz(4),sz(5));
+  PhiStore  = NaN(sz(3)*sz(4),sz(5)); AmpStore = PhiStore;
   for iLevel=1:1:sz(5)
     for iPoint=1:1:sz(3)*sz(4);
       Phi = CC(idx_F1_3D(iPoint,iLevel),idx_F1_3D(iPoint,iLevel),iPoint,iLevel);
       PhiStore(iPoint,iLevel) = Phi;
+      AmpStore(iPoint,iLevel) = sqrt(abs(Phi));
     end
   end
   PhiStore = reshape(PhiStore,sz(3),sz(4),sz(5));
+  AmpStore = reshape(AmpStore,sz(3),sz(4),sz(5));
   clear sz CC idx_F1_3D idx_F2_3D iLevel iPoint Phi CC
 
 
@@ -632,13 +634,15 @@ function NewFields = get_2dp1_lambdaz_v2(Airs,ST3D,Extra,Input)
   
   %convert phase change to wavelength
   sz = size(AlldP);
-  Lambda = permute(repmat(dZ,1,sz(1),sz(2)),[2,3,1])./AlldP.*2*pi;
+  Lambda = abs(permute(repmat(dZ,1,sz(1),sz(2)),[2,3,1])./AlldP.*2*pi);
   clear sz AlldP dZ
+  
 
 
   %and return
   NewFields.F3 = 1./Lambda;
   NewFields.m  = 1./Lambda;
+  NewFields.A  = AmpStore;
 
 return
 
