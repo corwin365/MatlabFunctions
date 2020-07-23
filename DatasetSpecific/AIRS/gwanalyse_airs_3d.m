@@ -460,7 +460,7 @@ return
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% 2D+1 st, versin 1. This computes independent horizontal wavenumber fits.
+%% 2D+1 st, version 1. This computes independent horizontal wavenumber fits.
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 function NewFields = get_2dp1_lambdaz(Airs,Extra,Input)
@@ -526,7 +526,7 @@ function NewFields = get_2dp1_lambdaz(Airs,Extra,Input)
   %there's definitely a way to vectorise this, but it's so fast it's not worth the hassle
   sz = size(CC);
   for iX=1:1:sz(3); for iY=1:1:sz(4); for iZ=1:1:sz(5)
-    CC(1,1,iX,iY,iZ) = CC(Store.idx_F1(iX,iY,iZ),Store.idx_F1(iX,iY,iZ),iX,iY,iZ);
+    CC(1,1,iX,iY,iZ) = CC(Store.idx_F1(iX,iY,iZ),Store.idx_F2(iX,iY,iZ),iX,iY,iZ);
   end; end; end
   clear iX iY iZ
   CC = squeeze(CC(1,1,:,:,:));
@@ -590,69 +590,127 @@ function NewFields = get_2dp1_lambdaz_v2(Airs,ST3D,Extra,Input)
     end;
     Airs.(Vars{iVar}) = Working.(Vars{iVar});
   end; clear iVar Working Vars Dims
-
-  %take the 2D S-Transform for each level, and retain the information we need later
+  
+  
+  %take the 2D S-Transform for each level, compute complex cospectra, and
+  %retain the information we need later the logic here is a bit convoluted 
+  %this is to save memory, as the high-order arrays we're using
+  %absolutely consume the stuff.
+  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+  
+  %identify the 2D scales that were identified as important at any height 
+  %in the 3DST analysis, and analyse only these in the loop below
+  Scales = {unique(ST3D.scales{1}),unique(ST3D.scales{2})};  
+  
+  %create storage array for 2DST output
+  %the '3' is because, to reduce memory use, we only retain the 
+  %3 levels we need at any point to compute the needed cospectra
+  Store.ST = complex(NaN(numel(Scales{1}),numel(Scales{2}), ...
+                     size(Airs.Tp,1),size(Airs.Tp,2),   ...
+                     3,                                 ...
+                     'single'));
+  Store.ST = complex(Store.ST);
+  
+  %also create array for the reduced complex cospectra that we will retain
+  CC = complex(NaN(size(Airs.Tp,1),size(Airs.Tp,2),   ...
+               numel(Airs.ret_z),'single'));
+  
+ 
   for iLevel=1:1:numel(Airs.ret_z)
     
     %do the 2DST
-    ST = gwanalyse_airs_2d(Airs,Airs.ret_z(iLevel),'FullST',true,'c',Input.c(1:2), ...
-                           'MaxWavelength', Input.MaxWaveLength,'MinWavelength', Input.MinWaveLength);
-
-    %store for later.
-    if iLevel == 1;
-      Store.ST = ST.ST;
-      freqs = ST.freqs; %we need freqs later, but only one copy as it's the same each loop
+    ST = gwanalyse_airs_2d(Airs,Airs.ret_z(iLevel),'FullST',true,'c',Input.c(1:2),'Scales',Scales);
+              
+    %store the data we need for cospectral computation
+    if iLevel <=3;
+      %just store the data
+      Store.ST(:,:,:,:,iLevel) = ST.ST;
     else
-      Store.ST = cat(5,Store.ST,ST.ST);
+      %shunt everything down and then replace the top level
+      Store.ST = circshift(Store.ST,-1,5);
+      Store.ST(:,:,:,:,3) = ST.ST;
     end
-  end; clear iLevel ST iVar
+    freqs = ST.freqs;    
+    
+    
+    %if this is the first loop, use the frequencies to match the indices in the 3DST output 
+    %to the indices in the 2DST output. Should be identical in value, just ordered differently
+    if iLevel == 1;
+      
+      %find the matches
+      F1_3D = ST3D.F1;  idx_F1_3D = NaN.*F1_3D;
+      F2_3D = ST3D.F2;  idx_F2_3D = NaN.*F2_3D;
+      for iPoint = 1:1:numel(F1_3D);
+        idx_F1_3D(iPoint) = closest(ST.freqs{1},F1_3D(iPoint));
+        idx_F2_3D(iPoint) = closest(ST.freqs{2},F2_3D(iPoint));
+      end; clear iPoint F1_3D F2_3D
+      
+      %add on levels corresponding to the Extra levels we supplied for fitting
+      sz = size(idx_F1_3D);
+      if isfield(Extra,'Bottom');
+        idx_F1_3D = cat(3,NaN(sz(1),sz(2),numel(Extra.Bottom.ret_z)),idx_F1_3D);
+        idx_F2_3D = cat(3,NaN(sz(1),sz(2),numel(Extra.Bottom.ret_z)),idx_F2_3D);
+      end
+      if isfield(Extra,'Top');
+        idx_F1_3D = cat(3,idx_F1_3D,NaN(sz(1),sz(2),numel(Extra.Top.ret_z)));
+        idx_F2_3D = cat(3,idx_F2_3D,NaN(sz(1),sz(2),numel(Extra.Top.ret_z)));
+      end 
+      clear sz
+    end
   
-  %produce complex cospectra
-  CC = Store.ST.*NaN;
-  for iLevel=2:1:numel(Airs.ret_z)-1
-    CC(:,:,:,:,iLevel) = Store.ST(:,:,:,:,iLevel-1) .* conj(Store.ST(:,:,:,:,iLevel+1));
-  end; clear iLevel
+    %only proceed to compute cospectra if we have enough levels
+    if iLevel < 3; continue; end
+    
+    %produce a complex cospectrum of the level below and level above the level of interest
+    LevCC = Store.ST(:,:,:,:,1) .* conj(Store.ST(:,:,:,:,3)); %this is for level ******iLevel-1*****
+
+    %extract just the points that correspond to the dominant waves at each point
+    sz = size(LevCC);
+    for iX=1:1:sz(3);
+      for iY=1:1:sz(4)
+        LevCC(1,1,iX,iY) = LevCC(idx_F1_3D(iX,iY,iLevel-1),...
+                                 idx_F2_3D(iX,iY,iLevel-1),...
+                                 iX,iY);
+      end
+    end
+    
+    %and store
+    CC(:,:,iLevel-1) = LevCC(1,1,:,:);
+    clear sz Lev
+     
+  end; clear iLevel ST iVar idx_F1_3D idx_F2_3D iLevel 
 
   %drop the extra levels we used for the phase fitting
   sz = size(Airs.ret_z); if sz(2) > sz(1); Airs.ret_z = Airs.ret_z'; end
   dZ = [diff(Airs.ret_z)+ circshift(diff(Airs.ret_z),1);0];
   if isfield(Extra,'Bottom');
     if numel(Extra.Bottom.ret_z) > 0;
-      CC = CC(:,:,:,:,numel(Extra.Bottom.ret_z)+1:end);
+      CC = CC(:,:,numel(Extra.Bottom.ret_z)+1:end);
       dZ = dZ(numel(Extra.Bottom.ret_z)+1:end);
     end
   end
   if isfield(Extra,'Top');
     if numel(Extra.Top.ret_z) > 0;
-      CC = CC(:,:,:,:,1:end-numel(Extra.Top.ret_z));
+      CC = CC(:,:,1:end-numel(Extra.Top.ret_z));
       dZ = dZ(1:end-numel(Extra.Top.ret_z));
     end
   end
-    
-  %find the nearest wavelength combination to the 3DST fits
-  F1_3D = ST3D.F1;  idx_F1_3D = NaN.*F1_3D;
-  F2_3D = ST3D.F2;  idx_F2_3D = NaN.*F2_3D;
-  for iPoint = 1:1:numel(F1_3D);
-    idx_F1_3D(iPoint) = closest(freqs{1},F1_3D(iPoint));
-    idx_F2_3D(iPoint) = closest(freqs{2},F2_3D(iPoint));
-  end; clear iPoint F1_3D F2_3D
 
   %retain the phase difference of these fits
   sz = size(CC);
-  CC        = reshape(CC,sz(1),sz(2),sz(3)*sz(4),sz(5));
-  idx_F1_3D = reshape(idx_F1_3D,sz(3)*sz(4),sz(5));
-  idx_F2_3D = reshape(idx_F2_3D,sz(3)*sz(4),sz(5));
-  PhiStore  = NaN(sz(3)*sz(4),sz(5)); AmpStore = PhiStore;
-  for iLevel=1:1:sz(5)
-    for iPoint=1:1:sz(3)*sz(4);
-      Phi = CC(idx_F1_3D(iPoint,iLevel),idx_F1_3D(iPoint,iLevel),iPoint,iLevel);
+  CC        = reshape(CC,sz(1)*sz(2),sz(3));
+  PhiStore  = NaN(sz(1)*sz(2),sz(3)); AmpStore = PhiStore;
+  for iLevel=1:1:sz(3)
+    for iPoint=1:1:sz(1)*sz(2);
+      Phi = CC(iPoint,iLevel);
       PhiStore(iPoint,iLevel) = Phi;
       AmpStore(iPoint,iLevel) = sqrt(abs(Phi));
     end
   end
-  PhiStore = reshape(PhiStore,sz(3),sz(4),sz(5));
-  AmpStore = reshape(AmpStore,sz(3),sz(4),sz(5));
-  clear sz CC idx_F1_3D idx_F2_3D iLevel iPoint Phi CC
+  PhiStore = reshape(PhiStore,sz(1),sz(2),sz(3));
+  AmpStore = reshape(AmpStore,sz(1),sz(2),sz(3));
+
+  clear sz CC iPoint Phi CC
 
 
   %convert each levels CC values to covarying phase between the two voxels at peak wavelength

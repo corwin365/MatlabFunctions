@@ -51,14 +51,15 @@ function [ST,Airs,Error,ErrorInfo] = gwanalyse_airs_2d(Airs,Height,varargin)
  %optional (all case-insensitive)
  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %
-%    VarName         (type,           default)  description
+%    VarName         (type,                  default)  description
 %    -----------------------------------------------------------------------------
-%    NScales         (numeric,           1000)  number of frequency scales to use
-%    Spacing         (array,        [NaN,NaN])  element spacing computed externally
-%    c               (array,      [0.25,0.25])  s-transform c parameter
-%    MinWaveLength   (array,            [0,0])  minimum output wavelength
-%    MaxWaveLength   (array,     [1,1].*99e99)  maximum output wavelength
-%    FullST          (logical,          false)  compute full S-Transform. OVERRIDES MANY OTHER SETTINGS, USE WITH CAUTION
+%    NScales         (numeric,                  1000)  number of frequency scales to use
+%    Spacing         (array,               [NaN,NaN])  element spacing computed externally
+%    c               (array,             [0.25,0.25])  s-transform c parameter
+%    MinWaveLength   (array,                   [0,0])  minimum output wavelength
+%    MaxWaveLength   (array,            [1,1].*99e99)  maximum output wavelength
+%    FullST          (logical,                 false)  compute full S-Transform. OVERRIDES MANY OTHER SETTINGS, USE WITH CAUTION
+%    Scales          (cell array,{-15:1:15,-15:1:15})  spectral scales for FullST. Only used if FullST is set.
 %
 %
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -106,6 +107,9 @@ addParameter(p,'HeightScaling',true,@islogical);  %assumes we want to scale the 
 %FullST is logical
 addParameter(p,'FullST',false,@islogical);  %assumes we're happy with the single largest mode in each pixel
 
+%scales is a pair of cell arrays
+CheckScales = @(x) validateattributes(x,{'cell'},{'size',[1,2],'real'});
+addParameter(p,'Scales',{-15:1:15,-15:1:15},CheckScales);
 
 %MaxWaveLength must be an positive real number
 CheckLambda = @(x) validateattributes(x,{'numeric'},{'>=',0});
@@ -210,11 +214,10 @@ else
 
   %cannot use automatic scales. set some sensible ones, if we haven't
   %specified them already (which is not currently an option)  
-  Scales{1} = -15:1:15;
-  Scales{2} = Scales{1};
+
   
   ST = nph_ndst(Airs.Tp,                                ...
-                Scales,                                 ...
+                Input.Scales,                           ...
                 PointSpacing,                           ...
                 Input.c,                                ...
                 'full');
