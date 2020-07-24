@@ -304,9 +304,8 @@ if Input.HeightScaling;
   ST.R    = ST.R    ./ CFac;
   ST.HR   = ST.HR   ./ CFac;
   
-% %   if Input.TwoDPlusOne; 
-% %     ST.A_2dp1    = ST.A_2dp1    ./ CFac;
-% %   end
+  if Input.TwoDPlusOne;     ST.A_2dp1     = ST.A_2dp1     ./ CFac; end
+  if Input.TwoDPlusOne_ind; ST.A_2dp1_ind = ST.A_2dp1_ind ./ CFac; end
   
   clear CFac
 end
@@ -600,7 +599,7 @@ function NewFields = get_2dp1_lambdaz_v2(Airs,ST3D,Extra,Input)
   
   %identify the 2D scales that were identified as important at any height 
   %in the 3DST analysis, and analyse only these in the loop below
-  Scales = {unique(ST3D.scales{1}),unique(ST3D.scales{2})};  
+  Scales = {unique(ST3D.scales{2}),unique(ST3D.scales{1})};  
   
   %create storage array for 2DST output
   %the '3' is because, to reduce memory use, we only retain the 
@@ -666,16 +665,26 @@ function NewFields = get_2dp1_lambdaz_v2(Airs,ST3D,Extra,Input)
 
     %extract just the points that correspond to the dominant waves at each point
     sz = size(LevCC);
+    a = Store.ST(:,:,:,:,1);
+    b = Store.ST(:,:,:,:,3);
     for iX=1:1:sz(3);
       for iY=1:1:sz(4)
-        LevCC(1,1,iX,iY) = LevCC(idx_F1_3D(iX,iY,iLevel-1),...
-                                 idx_F2_3D(iX,iY,iLevel-1),...
-                                 iX,iY);
+        a(1,1,iX,iY) = a(idx_F1_3D(iX,iY,iLevel-1),...
+                         idx_F2_3D(iX,iY,iLevel-1),...
+                         iX,iY);
+        b(1,1,iX,iY) = b(idx_F1_3D(iX,iY,iLevel-1),...
+                         idx_F2_3D(iX,iY,iLevel-1),...
+                         iX,iY);
+        
+% % %         LevCC(1,1,iX,iY) = LevCC(idx_F1_3D(iX,iY,iLevel-1),...
+% % %                                  idx_F2_3D(iX,iY,iLevel-1),...
+% % %                                  iX,iY);
       end
     end
     
+    
     %and store
-    CC(:,:,iLevel-1) = LevCC(1,1,:,:);
+    CC(:,:,iLevel-1) = a(1,1,:,:) .* conj(b(1,1,:,:));%LevCC(1,1,:,:);
     clear sz Lev
      
   end; clear iLevel ST iVar idx_F1_3D idx_F2_3D iLevel 
