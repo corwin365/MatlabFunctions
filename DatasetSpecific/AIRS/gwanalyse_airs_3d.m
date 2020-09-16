@@ -133,6 +133,9 @@ addParameter(p,'MaxWaveLength',[1,1,1].*99e99,CheckLambda);  %crazy-large defaul
 addParameter(p,'MinWaveLength',[1,1,1].*0,CheckLambda);  %zero default
 
 
+
+
+
 %inputs - extra settings for 2D+1 ST
 %%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -154,13 +157,10 @@ if numel(a) > 0;
     TwoDSettings.Steps       = 3;%[1,2,3,4,5];           %number of steps to take phase difference over. '0' takes it from a basis level, defined above, while nonzero values use the phase shift with that many levels *above*
     TwoDSettings.Weight      = 0;                        %height-weight the vertical layers
     
- 
+    Flags = fieldnames('TwoDSettings');
     b = find(strcmp(varargin,'TwoDPlusOneSettings'));
     if numel(b) > 0;
-      
-      
       InStruct = varargin{b+1};
-      Flags = {'c1','c2','NPeaks','Threshold','Filt','Thin','Steps','Weight'};
       for iFlag=1:1:numel(Flags)
         if isfield(InStruct,Flags{iFlag}); TwoDSettings.(Flags{iFlag}) = InStruct.(Flags{iFlag}); end
       end
