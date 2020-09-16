@@ -122,8 +122,9 @@ addParameter(p,'HeightScaling',true,@islogical);  %assumes we want to scale the 
 %NotAirsData is logical
 addParameter(p,'NotAirsData',false,@islogical);  %assumes we are feeding the routine AIRS data
 
-%TwoDPlusOne is logical
-addParameter(p,'TwoDPlusOne',    false,@islogical); 
+%TwoDPlusOne is logical, and its settings are a struct (which should be blank if not set)
+addParameter(p,        'TwoDPlusOne',   false,@islogical); 
+addParameter(p,'TwoDPlusOneSettings',struct(),@isstruct); 
 
 %MaxWaveLength must be an positive real number
 CheckLambda = @(x) validateattributes(x,{'numeric'},{'>=',0});
@@ -157,10 +158,9 @@ if numel(a) > 0;
     TwoDSettings.Steps       = 3;%[1,2,3,4,5];           %number of steps to take phase difference over. '0' takes it from a basis level, defined above, while nonzero values use the phase shift with that many levels *above*
     TwoDSettings.Weight      = 0;                        %height-weight the vertical layers
     
-    Flags = fieldnames('TwoDSettings');
     b = find(strcmp(varargin,'TwoDPlusOneSettings'));
     if numel(b) > 0;
-      InStruct = varargin{b+1};
+      InStruct = varargin{b+1};  Flags = fieldnames(TwoDSettings);
       for iFlag=1:1:numel(Flags)
         if isfield(InStruct,Flags{iFlag}); TwoDSettings.(Flags{iFlag}) = InStruct.(Flags{iFlag}); end
       end
