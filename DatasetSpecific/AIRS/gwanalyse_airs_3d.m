@@ -519,9 +519,18 @@ function NewFields = get_2dp1_lambdaz(Airs,Extra,Settings)
   
   %thin scales?
   if Settings.Thin
-    s1 = Scales{1}; Scales{1} = s1([1:1:5,6:2:end]);
-    s2 = Scales{2}; Scales{2} = s2([1:1:5,6:2:end]);
-    clear s1 s2
+    
+    %some coarser scales that should still resolve wave structure well
+    %these numbers assume a standard-sized AIRS granule
+    lx = unique(floor((20.* 90)./logspace(log10(20),log10( 20.*90),30))); %UP TO 30 freqs xt
+    ly = unique(floor((18.*135)./logspace(log10(18),log10(18.*135),30))); %UP TO 30 freqs at    
+    
+    Scales{1} = lx; Scales{2} = ly;
+    clear lx ly
+    
+% % %     s1 = Scales{1}; Scales{1} = s1([1:1:5,6:2:end]);
+% % %     s2 = Scales{2}; Scales{2} = s2([1:1:5,6:2:end]);
+% % %     clear s1 s2
   end
 
   textprogressbar('Initial ST pass ')
