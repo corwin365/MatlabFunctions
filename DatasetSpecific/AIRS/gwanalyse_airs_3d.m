@@ -106,8 +106,8 @@ CheckNScales = @(x) validateattributes(x,{'numeric'},{'nonnegative','integer'});
 addParameter(p,'NScales',1000,CheckNScales);  %assume 1000 scales unless specified  
 
 %ZRange must be an array with two positive values between 0 and 90
-if Status ==0; CheckZRange = @(x) validateattributes(x,{'numeric'},{'size',[1,2],'>=',   0,'<=', 90});
-else           CheckZRange = @(x) validateattributes(x,{'numeric'},{'size',[1,2],'>=',-Inf,'<=',Inf});
+if Status == 0; CheckZRange = @(x) validateattributes(x,{'numeric'},{'size',[1,2],'>=',   0,'<=', 90});
+else            CheckZRange = @(x) validateattributes(x,{'numeric'},{'size',[1,2],'>=',-Inf,'<=',Inf});
 end
 addParameter(p,'ZRange',[20,60],CheckZRange);  %assumes only the 3km regular step range
 
@@ -123,8 +123,7 @@ addParameter(p,'HeightScaling',true,@islogical);  %assumes we want to scale the 
 addParameter(p,'NotAirsData',false,@islogical);  %assumes we are feeding the routine AIRS data
 
 %TwoDPlusOne is logical
-addParameter(p,'TwoDPlusOne',    false,@islogical);  %assumes we *don't* want to compute wavelengths via 2D+1 (this is much slower, but often more accurate)
-addParameter(p,'TwoDPlusOne_ind',false,@islogical);  %as above, but computes fits independently rather than using 3DST fits
+addParameter(p,'TwoDPlusOne',    false,@islogical); 
 
 %MaxWaveLength must be an positive real number
 CheckLambda = @(x) validateattributes(x,{'numeric'},{'>=',0});
@@ -132,6 +131,46 @@ addParameter(p,'MaxWaveLength',[1,1,1].*99e99,CheckLambda);  %crazy-large defaul
 
 %MinWaveLength must be an positive real number
 addParameter(p,'MinWaveLength',[1,1,1].*0,CheckLambda);  %zero default
+
+
+%inputs - extra settings for 2D+1 ST
+%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%these will come in as a struct, which must exist and is parsed here
+%note that the individual flags WILL NOT BE SANITY-CHECKED - caveat emptor...
+
+%first, check if we're doing a 2D call. Then parse out the fields
+a = find(strcmp(varargin,'TwoDPlusOne'));
+if numel(a) > 0;
+  if varargin{a+1} == 1;
+    
+    %defaults - override if they don't exist in the call
+    TwoDSettings.c1          = [1,1].*0.5;               %c for  first pass (coarse in space, fine in freq)
+    TwoDSettings.c2          = [1,1].*0.25;              %c for second pass (coarse in freq, fine in space)
+    TwoDSettings.NPeaks      = 1;%3;                     %number of spectral peaks to identify for each spatial point
+    TwoDSettings.Threshold   = 0;                        %threshold in spectral space to be identified as a peak. This is an amplitude for a lone 2DST (as opposed to a cospectrum)
+    TwoDSettings.Filt        = fspecial('gaussian',5,1); %characteristic size of point in spectral space. This is a little fatter than the default, to avoid very close peaks.
+    TwoDSettings.Thin        = 1;                        %thin out the number of scales (large runtime reduction, but changes the results)
+    TwoDSettings.Steps       = 3;%[1,2,3,4,5];           %number of steps to take phase difference over. '0' takes it from a basis level, defined above, while nonzero values use the phase shift with that many levels *above*
+    TwoDSettings.Weight      = 0;                        %height-weight the vertical layers
+    
+ 
+    b = find(strcmp(varargin,'TwoDPlusOneSettings'));
+    if numel(b) > 0;
+      
+      
+      InStruct = varargin{b+1};
+      Flags = {'c1','c2','NPeaks','Threshold','Filt','Thin','Steps','Weight'};
+      for iFlag=1:1:numel(Flags)
+        if isfield(InStruct,Flags{iFlag}); TwoDSettings.(Flags{iFlag}) = InStruct.(Flags{iFlag}); end
+      end
+    end
+  end  
+end; clear a b iFlag Flags InStruct
+
+
+
+
 
 
 %parse the inputs, and tidy up
@@ -144,7 +183,7 @@ parse(p,Airs,varargin{:});
 Input = p.Results;
 
 %tidy up
-clearvars -except Input ST Airs Error ErrorInfo
+clearvars -except Input ST Airs Error ErrorInfo TwoDSettings
 clear CheckNScales CheckZRange CheckSpacing CheckLambda
 
 
@@ -261,29 +300,7 @@ ST = nph_ndst(Airs.Tp,                                ...
               'minwavelengths', Input.MinWaveLength);
 clear PointSpacing
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%if requested, also use the 2D+1 method to compute vertical wavelength
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-if     Input.TwoDPlusOne;    
-  
-  %standard version - uses fitted horizontal wavelengths from 3DST
-  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-  if Input.HeightScaling; Airs.Tp = Airs.Tp ./ CFac; end
-  NewFields = get_2dp1_lambdaz(Airs,Extra,Input);
-  if Input.HeightScaling; Airs.Tp = Airs.Tp .* CFac; end
-  %add those fields to the main ST array
-  Fields = fieldnames(NewFields);
-  for iF=1:1:numel(Fields);
-    ST.([Fields{iF},'_2dp1']) = NewFields.(Fields{iF});
-  end; clear iF Fields NewFields
-
-end
-  
-
-
-
-%undo height scaling
 if Input.HeightScaling;
   Airs.Tp = Airs.Tp ./ CFac;
   ST.A    = ST.A    ./ CFac;
@@ -295,6 +312,31 @@ if Input.HeightScaling;
   clear CFac
 end
 
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%if requested, also use the 2D+1 method to compute vertical wavelength
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+if     Input.TwoDPlusOne;    
+  
+  %standard version - uses fitted horizontal wavelengths from 3DST
+  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+  
+  %settings for 2D+1. consider moving these to primary inputs after testing.
+  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    
+  NewFields = get_2dp1_lambdaz(Airs,Extra,TwoDSettings);
+  clear TwoDSettings
+  
+  
+  %add those fields to the main ST array
+  Fields = fieldnames(NewFields);
+  for iF=1:1:numel(Fields);
+    ST.([Fields{iF},'_2dp1']) = NewFields.(Fields{iF});
+  end; clear iF Fields NewFields
+
+end
+  
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -444,19 +486,8 @@ return
 %% 2D+1 st, version 1. This computes independent horizontal wavenumber fits.
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-function NewFields = get_2dp1_lambdaz(Airs,Extra,Input)
+function NewFields = get_2dp1_lambdaz(Airs,Extra,Settings)
 
-  %settings for 2D+1. consider moving these to primary inputs after testing.
-  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-  
-  Settings.c1          = [1,1].*0.5;               %c for  first pass (coarse in space, fine in freq)
-  Settings.c2          = [1,1].*0.25;              %c for second pass (coarse in freq, fine in space)
-  Settings.NPeaks      = 1;%3;                     %number of spectral peaks to identify for each spatial point
-  Settings.Threshold   = 0;                        %threshold in spectral space to be identified as a peak. This is an amplitude for a lone 2DST (as opposed to a cospectrum)
-  Settings.Filt        = fspecial('gaussian',5,1); %characteristic size of point in spectral space. This is a little fatter than the default, to avoid very close peaks.
-  Settings.Thin        = 1;                        %thin out the number of scales (large runtime reduction, but changes the results)
-  Settings.Steps       = 3;%[1,2,3,4,5];           %number of steps to take phase difference over. '0' takes it from a basis level, defined above, while nonzero values use the phase shift with that many levels *above*
-  Settings.Weight      = 0;                        %height-weight the vertical layers
     
   %glue the extra levels we retained to the top and bottom
   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -492,7 +523,7 @@ function NewFields = get_2dp1_lambdaz(Airs,Extra,Input)
     s2 = Scales{2}; Scales{2} = s2([1:1:5,6:2:end]);
     clear s1 s2
   end
-  
+
   textprogressbar('Initial ST pass ')
   for iLevel=1:1:numel(Airs.ret_z);
     
@@ -597,11 +628,11 @@ function NewFields = get_2dp1_lambdaz(Airs,Extra,Input)
   
   %create storage arrays for the fine STs
   Store.STs  = complex(NaN([numel(Scales{1}),numel(Scales{2}), ...
-                       size(Airs.l1_lat),size(Airs.ret_z,1)], ...
+                       size(Airs.l1_lat),numel(Airs.ret_z)], ...
                        'single'));
   
   textprogressbar('Computing fine STs ')
-  for iLevel=1:1:size(Airs.ret_z,1);
+  for iLevel=1:1:numel(Airs.ret_z);
     
     %do ST
     ST = gwanalyse_airs_2d(Airs,Airs.ret_z(iLevel), ...
