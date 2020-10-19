@@ -156,7 +156,7 @@ if numel(a) > 0;
     TwoDSettings.Filt        = fspecial('gaussian',5,1); %characteristic size of point in spectral space. This is a little fatter than the default, to avoid very close peaks.
     TwoDSettings.Thin        = 1;                        %thin out the number of scales (large runtime reduction, but changes the results)
     TwoDSettings.Steps       = 3;%[1,2,3,4,5];           %number of steps to take phase difference over. '0' takes it from a basis level, defined above, while nonzero values use the phase shift with that many levels *above*
-    TwoDSettings.Weight      = 0;                        %height-weight the vertical layers
+    TwoDSettings.Weight      = 1;                        %height-weight the vertical layers
     
     b = find(strcmp(varargin,'TwoDPlusOneSettings'));
     if numel(b) > 0;
