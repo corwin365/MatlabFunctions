@@ -6,7 +6,7 @@ function Pressure = ecmwf_prs_v2(lnsp,NLevs)
 %array safe
 %Corwin wright, 01/AUG/2016
 %
-%modified 26/08/2018 to assume an lnsp if none specified - this is fie provided
+%modified 26/08/2018 to assume an lnsp if none specified - this is fine provided
 %you're not using data anywhere near the groundf, since the high-altitude
 %pressure levels are constant. to use this mod,e set lnsp to []
 %

@@ -198,7 +198,7 @@ InZRange = find(Airs.ret_z >= Input.ZRange(1) ...
             
 %if we're using the 2D+1 method, we'l need some extra levels for phase fitting   
 %retain these in a separate array - they'll be thrown away after use
-if Input.TwoDPlusOne | Input.TwoDPlusOne_ind; 
+if Input.TwoDPlusOne; 
   if min(InZRange) > 1;
     Extra.Bottom.ret_z    = squeeze(Airs.ret_z(       min(InZRange)-1));
     Extra.Bottom.Tp       = squeeze(Airs.Tp(      :,:,min(InZRange)-1));
