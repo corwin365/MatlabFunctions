@@ -141,7 +141,7 @@ addParameter(p,'MinWaveLength',[1,1,1].*0,CheckLambda);  %zero default
 %%%%%%%%%%%%%%%%%%%%%%%%%
 
 %these will come in as a struct, which must exist and is parsed here
-%note that the individual flags WILL NOT BE SANITY-CHECKED - caveat emptor...
+%note that the individual flags WILL NOT BE SANITY-CHECKED - cave usor...
 
 %first, check if we're doing a 2D call. Then parse out the fields
 a = find(strcmp(varargin,'TwoDPlusOne'));
@@ -149,14 +149,14 @@ if numel(a) > 0;
   if varargin{a+1} == 1;
     
     %defaults - override if they don't exist in the call
-    TwoDSettings.c1          = [1,1].*0.5;               %c for  first pass (coarse in space, fine in freq)
+    TwoDSettings.c1          = [1,1].*1;                 %c for  first pass (coarse in space, fine in freq)
     TwoDSettings.c2          = [1,1].*0.25;              %c for second pass (coarse in freq, fine in space)
-    TwoDSettings.NPeaks      = 1;%3;                     %number of spectral peaks to identify for each spatial point
+    TwoDSettings.NPeaks      = 1;                        %number of spectral peaks to identify for each spatial point
     TwoDSettings.Threshold   = 0;                        %threshold in spectral space to be identified as a peak. This is an amplitude for a lone 2DST (as opposed to a cospectrum)
     TwoDSettings.Filt        = fspecial('gaussian',5,1); %characteristic size of point in spectral space. This is a little fatter than the default, to avoid very close peaks.
     TwoDSettings.Thin        = 1;                        %thin out the number of scales (large runtime reduction, but changes the results)
-    TwoDSettings.Steps       = 3;%[1,2,3,4,5];           %number of steps to take phase difference over. '0' takes it from a basis level, defined above, while nonzero values use the phase shift with that many levels *above*
-    TwoDSettings.Weight      = 1;                        %height-weight the vertical layers
+    TwoDSettings.Steps       = 2;%[1,2,3,4,5];           %number of steps to take phase difference over. '0' takes it from a basis level, defined above, while nonzero values use the phase shift with that many levels *above*
+    TwoDSettings.Weight      = 0;                        %height-weight the vertical layers
     
     b = find(strcmp(varargin,'TwoDPlusOneSettings'));
     if numel(b) > 0;
