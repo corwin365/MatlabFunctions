@@ -149,7 +149,7 @@ if numel(a) > 0;
   if varargin{a+1} == 1;
     
     %defaults - override if they don't exist in the call
-    TwoDSettings.c1          = [1,1].*1;                 %c for  first pass (coarse in space, fine in freq)
+    TwoDSettings.c1          = [1,1].*1;               %c for  first pass (coarse in space, fine in freq)
     TwoDSettings.c2          = [1,1].*0.25;              %c for second pass (coarse in freq, fine in space)
     TwoDSettings.NPeaks      = 1;                        %number of spectral peaks to identify for each spatial point
     TwoDSettings.Threshold   = 0;                        %threshold in spectral space to be identified as a peak. This is an amplitude for a lone 2DST (as opposed to a cospectrum)
@@ -157,7 +157,7 @@ if numel(a) > 0;
     TwoDSettings.Thin        = 1;                        %thin out the number of scales (large runtime reduction, but changes the results)
     TwoDSettings.Steps       = 2;%[1,2,3,4,5];           %number of steps to take phase difference over. '0' takes it from a basis level, defined above, while nonzero values use the phase shift with that many levels *above*
     TwoDSettings.Weight      = 0;                        %height-weight the vertical layers
-    
+
     b = find(strcmp(varargin,'TwoDPlusOneSettings'));
     if numel(b) > 0;
       InStruct = varargin{b+1};  Flags = fieldnames(TwoDSettings);

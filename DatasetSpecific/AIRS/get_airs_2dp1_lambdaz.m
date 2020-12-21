@@ -85,7 +85,7 @@ function NewFields = get_2dp1_lambdaz(Airs,Extra,Settings)
   
   %% find spectral maxima in the two fields
   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-  
+    
   %find spectral peaks
   PeakStore = NaN([size(Airs.l1_lat),Settings.NPeaks,3]);
   
@@ -93,8 +93,10 @@ function NewFields = get_2dp1_lambdaz(Airs,Extra,Settings)
   for iX=1:1:size(Airs.l1_lat,1);
     for iY=1:1:size(Airs.l1_lat,2);
       
+      %pull out x/y location spectral space
       Frame = abs(Store.ST(  :,:,iX,iY));
       
+      %peak finder setup
       if Settings.NPeaks > 1; cent = FastPeakFind(Frame,0,Settings.Filt); %find n peaks
       else                    cent = [];                                  %used in logic below
       end 
