@@ -59,7 +59,7 @@ function NewFields = get_2dp1_lambdaz(Airs,Extra,Settings)
                            'FullST',true,           ...
                            'c',Settings.c1,         ...
                            'Scales',Scales);
-    
+
     %compute weight
     if Settings.Weight == 1; CFac = exp(-(Airs.ret_z(iLevel)-42) ./ (2*scale_height(42))); %42 is arbitrary, but must be consistent across levels
     else                     CFac = 1;
