@@ -56,6 +56,29 @@ switch NDims
     else
       ZG = bin2mat3d(x,y,z,v,xi,yi,zi,varargin{8:end});
     end
+  
+  case 3;
+    
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    %bin2mat4d
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    
+    x    = double(varargin{1});
+    y    = double(varargin{2});
+    z    = double(varargin{3});
+    a    = double(varargin{4});    
+    v    = double(varargin{5});
+    xi   = double(varargin{6});
+    yi   = double(varargin{7});
+    zi   = double(varargin{8});
+    ai   = double(varargin{9});    
+    
+    if numel(varargin) < 10;
+      ZG = bin2mat3d(x,y,z,a,v,xi,yi,zi,ai);
+    else
+      ZG = bin2mat3d(x,y,z,a,v,xi,yi,zi,ai,varargin{10:end});
+    end
+    
     
     
 end
@@ -319,3 +342,88 @@ else
   ZG=cellfun(@(x)(feval(fun,x,varargin{2:end})),blc_ind);
 end
 end
+
+
+
+
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%bin2mat4d
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+function ZG = bin2mat4d(x,y,c,d,z,XI,YI,CI,DI,varargin)
+
+%BIN2MAT4D
+% Bins data (Z) in 4D coordinates (x,y,c)  into 4D bins specified by XI, YI,
+% CI
+
+%check inputs
+error(nargchk(9,inf,nargin,'struct'));
+
+%make sure the vectors are column vectors
+x = x(:);
+y = y(:);
+c = c(:);
+d = d(:);
+z = z(:);
+
+if all(any(diff(cellfun(@length,{x,y,z,c,d}))));
+  error('Inputs x, y, c, d and z must be the same size');
+end
+
+%process optional input
+fun=@mean;
+test=1;
+if ~isempty(varargin)
+  fun=varargin{1};
+  if ~isa(fun,'function_handle');
+    fun=str2func(fun);
+  end
+  
+  %test the function for non-scalar output
+  % test = feval(fun,rand(5,1),varargin{2:end});
+  
+end
+
+%grid nodes
+xi=squeeze(XI(1,:,1));
+yi=squeeze(YI(:,1,1));
+ci=squeeze(CI(1,1,:));
+di=squeeze(DI(1,1,:));
+[m,n,l,o]=size(XI);
+
+%limit values to those within the specified grid
+xmin=min(xi);
+xmax=max(xi);
+ymin=min(yi);
+ymax=max(yi);
+cmin=min(ci);
+cmax=max(ci);
+dmin=min(di);
+dmax=max(di);
+gind =(x>=xmin & x<=xmax & ...
+       y>=ymin & y<=ymax & ...
+       c>=cmin & c<=cmax & ...
+       d>=dmin & d<=dmax );
+
+%find the indices for each x and y in the grid
+[junk,xind] = histc(x(gind),xi);
+[junk,yind] = histc(y(gind),yi);
+[junk,cind] = histc(c(gind),ci);
+[junk,dind] = histc(d(gind),di);
+
+%break the data into a cell for each grid node
+blc_ind=accumarray([yind xind cind,dind],z(gind),[m n l o],@(x){x},{NaN});
+
+%evaluate the data in each grid using FUN
+if numel(test)>1
+  ZG=cellfun(@(x)(feval(fun,x,varargin{2:end})),blc_ind,'uni',0);
+else
+  ZG=cellfun(@(x)(feval(fun,x,varargin{2:end})),blc_ind);
+end
+end
+
