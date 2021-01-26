@@ -16,8 +16,8 @@ function [u,v,u_lon,v_lat] = compute_geostrophic_wind(Data)
 %
 %
 %Outputs:
-%     u     [nlons-1 x nlats   x nlevels x ntimes] : zonal wind 
-%     v     [nlons   x nlats-1 x nlevels x ntimes] : meridional wind 
+%     u     [nlats   x nlons-1 x nlevels x ntimes] : zonal wind 
+%     v     [nlats-1 x nlons   x nlevels x ntimes] : meridional wind 
 %     u_lon [nlons-1]                              : shifted longitude grid for u
 %     v_lat [nlats-1]                              : shifted latitude  grid for v
 %
@@ -76,8 +76,8 @@ if numel(sz) == 2; sz = [sz,1]; end
 
 %reshape arrays to make the dimension we're taking the derivative the only
 %exposed dimension
-Z_x = reshape(permute(Data.GPH,[2,1,3:end]),sz(2),prod(sz([1,3:end])));
-Z_y = reshape(        Data.GPH,             sz(1),prod(sz([  2:end])));
+Z_x = reshape(permute(Data.GPH,[2,1,3:numel(sz)]),sz(2),prod(sz([1,3:end])));
+Z_y = reshape(        Data.GPH,                   sz(1),prod(sz([  2:end])));
 
 %take derivative, in metres
 dZdx = diff(Z_x,1,1)./ (diff(Data.LonScale) .* (2 .* pi .* Const.Re ./ 360));
