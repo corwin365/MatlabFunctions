@@ -76,8 +76,8 @@ if numel(sz) == 2; sz = [sz,1]; end
 
 %reshape arrays to make the dimension we're taking the derivative the only
 %exposed dimension
-Z_x = reshape(permute(Data.GPH,[2,1,3,4]),sz(2),prod(sz([1,3:end])));
-Z_y = reshape(        Data.GPH,           sz(1),prod(sz([  2:end])));
+Z_x = reshape(permute(Data.GPH,[2,1,3:end]),sz(2),prod(sz([1,3:end])));
+Z_y = reshape(        Data.GPH,             sz(1),prod(sz([  2:end])));
 
 %take derivative, in metres
 dZdx = diff(Z_x,1,1)./ (diff(Data.LonScale) .* (2 .* pi .* Const.Re ./ 360));
