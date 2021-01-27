@@ -18,10 +18,10 @@ function [u,v,u_lat,v_lon] = compute_geostrophic_wind(Data,NoWrap)
 %
 %
 %Outputs:
-%     u     [nlats   x nlons-1 x nlevels x ntimes] : zonal wind 
-%     v     [nlats-1 x nlons   x nlevels x ntimes] : meridional wind 
-%     u_lat [nlats-1]                              : shifted latitude  grid for u
-%     v_lon [nlons-1]                              : shifted longitude grid for v
+%     u     [nlats   x nlons-1 x [arbitrary higher dimensions]] : zonal wind 
+%     v     [nlats-1 x nlons   x [arbitrary higher dimensions]] : meridional wind 
+%     u_lat [nlats-1]                                           : shifted latitude  grid for u
+%     v_lon [nlons-1]                                           : shifted longitude grid for v
 %
 %   Corwin Wright,c.wright@bath.ac.uk
 %   2021/01/26
@@ -33,8 +33,8 @@ function [u,v,u_lat,v_lon] = compute_geostrophic_wind(Data,NoWrap)
 %% inputs
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-if ~exist(NoWrap); NoWrap = 0; end
-if NoWarp ~= 1;    NoWrap = 0; end
+if ~exist('NoWrap'); NoWrap = 0; end
+if NoWrap ~= 1;      NoWrap = 0; end
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% physical constants
