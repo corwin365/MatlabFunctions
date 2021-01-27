@@ -42,7 +42,7 @@ if NoWrap ~= 1;      NoWrap = 0; end
 
 Const.Omega = 2.0*pi/86400.0;
 Const.g     = 9.81;
-Const.Re    = 6371e3; %km
+Const.Re    = 6371e3; %m
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% fix dimensions
