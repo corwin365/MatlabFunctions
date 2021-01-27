@@ -1,25 +1,27 @@
-function [u,v,u_lon,v_lat] = compute_geostrophic_wind(Data)
+function [u,v,u_lat,v_lon] = compute_geostrophic_wind(Data,NoWrap)
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %compute geostrophic wind from GPH data
 %
-%implements u = -(1/f) .* (dZ./dy)
-%and        v = -(1/f) .* (dZ./dx)
+%implements u = -(g/f) .* (dZ./dy)
+%and        v = -(g/f) .* (dZ./dx)
 %
 %
 %Inputs:
 %  Data - struct, containing:
 %     GPH       [nlats x nlons x [arbitrary higher dimensions]] : geopotential HEIGHT
-%     LonScale  [nlons]                                         : longitude (degrees), full range required
-%     LatScale  [nlats]                                         : latitude  (degrees), arbitrary range
+%     LonScale  [nlons]                                         : longitude (degrees)
+%     LatScale  [nlats]                                         : latitude  (degrees)
+%  NoWrap - if set to 1, longitudes are **not** assumed to wrap (useful for subglobal regions)
+%         - to be clear, BY DEFAULT LONGITUDES ARE ASSUMED TO WRAP
 %
 %
 %Outputs:
 %     u     [nlats   x nlons-1 x nlevels x ntimes] : zonal wind 
 %     v     [nlats-1 x nlons   x nlevels x ntimes] : meridional wind 
-%     u_lon [nlons-1]                              : shifted longitude grid for u
-%     v_lat [nlats-1]                              : shifted latitude  grid for v
+%     u_lat [nlats-1]                              : shifted latitude  grid for u
+%     v_lon [nlons-1]                              : shifted longitude grid for v
 %
 %   Corwin Wright,c.wright@bath.ac.uk
 %   2021/01/26
@@ -27,6 +29,12 @@ function [u,v,u_lon,v_lat] = compute_geostrophic_wind(Data)
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% inputs
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+if ~exist(NoWrap); NoWrap = 0; end
+if NoWarp ~= 1;    NoWrap = 0; end
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% physical constants
@@ -47,22 +55,24 @@ Data.LatScale = squeeze(Data.LatScale)';
 %% deal with the spherical Earth
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-%the earth is spherical, so pad either end of the array in the zonal
-%direction by one point
+if NoWrap ~=1;
 
-%lon is easier
-Data.LonScale = [Data.LonScale(  1)-mean(diff(Data.LonScale)), ...
-                 Data.LonScale',                               ...
-                 Data.LonScale(end)+mean(diff(Data.LonScale))]';
-               
-%gph is trickier as we're working in an arbitrary number of higher dimensions
-sz = size(Data.GPH);
-Data.GPH = permute(Data.GPH,[2,1,3:numel(sz)]);
-Data.GPH = reshape(Data.GPH,sz(2),[]);
-Data.GPH = [Data.GPH(end,:);Data.GPH;Data.GPH(1,:)];
-Data.GPH = reshape(Data.GPH,[sz(2)+2,sz(1),sz(3:end)]);
-Data.GPH = permute(Data.GPH,[2,1,3:numel(sz)]);
-clear sz
+  %the earth is spherical, so pad either end of the array in the zonal
+  %direction by one point
+  
+  %lonscale is easy
+  Data.LonScale = [Data.LonScale(  1)-mean(diff(Data.LonScale)), ...
+                   Data.LonScale',                               ...
+                   Data.LonScale(end)+mean(diff(Data.LonScale))]';
+  
+  %gph is trickier as we're working in an arbitrary number of higher dimensions
+  sz = size(Data.GPH);
+  Data.GPH = reshape(permute(Data.GPH,[2,1,3:numel(sz)]),sz(2),[]);
+  Data.GPH = [Data.GPH(end,:);Data.GPH;Data.GPH(1,:)];
+  Data.GPH = permute(reshape(Data.GPH,[sz(2)+2,sz(1),sz(3:end)]),[2,1,3:numel(sz)]);
+  clear sz
+  
+end
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -95,46 +105,45 @@ clear sz
 %% deal with the spherical Earth
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-%lonscale is again easy
-Data.LonScale = Data.LonScale(2:end-1);
+if NoWrap ~=1;
+  
+  %lonscale is again easy
+  Data.LonScale = Data.LonScale(2:end-1);
+  
+  %dZdy and dZdx are again hard
+  sz = size(dZdx);
+  dZdx = reshape(permute(dZdx,[2,1,3:numel(sz)]),sz(2),[]);
+  dZdx = dZdx(2:end-1,:);
+  dZdx = permute(reshape(dZdx,[sz(2)-2,sz(1),sz(3:end)]),[2,1,3:numel(sz)]);
+  
+  sz = size(dZdy);
+  dZdy = reshape(permute(dZdy,[2,1,3:numel(sz)]),sz(2),[]);
+  dZdy = dZdy(2:end-1,:);
+  dZdy = permute(reshape(dZdy,[sz(2)-2,sz(1),sz(3:end)]),[2,1,3:numel(sz)]);
 
-%dZdy and dZdx are again hard
-sz = size(dZdx);
-dZdx = permute(dZdx,[2,1,3:numel(sz)]);
-dZdx = reshape(dZdx,sz(2),[]);
-dZdx = dZdx(2:end-1,:);
-dZdx = reshape(dZdx,[sz(2)-2,sz(1),sz(3:end)]);
-dZdx = permute(dZdx,[2,1,3:numel(sz)]);
-
-sz = size(dZdy);
-dZdy = permute(dZdy,[2,1,3:numel(sz)]);
-dZdy = reshape(dZdy,sz(2),[]);
-dZdy = dZdy(2:end-1,:);
-dZdy = reshape(dZdy,[sz(2)-2,sz(1),sz(3:end)]);
-dZdy = permute(dZdy,[2,1,3:numel(sz)]);
-
-clear sz
-
+  clear sz
+  
+end
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% scale to wind
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-fv = 2.* Const.Omega .* sind(Data.LatScale(1:end-1)+diff(Data.LatScale)./2);
-fu = 2.* Const.Omega .* sind(Data.LatScale);
+fa = 2.* Const.Omega .* sind(Data.LatScale(1:end-1)+diff(Data.LatScale)./2);
+fb = 2.* Const.Omega .* sind(Data.LatScale);
 
 %reshape again, exposing latitude, then compute u and v
 szX = size(dZdx); szY = size(dZdy);
-u = reshape(((-Const.g./fu) .* reshape(dZdx,szX(1),[])),szX);
-v = reshape(((-Const.g./fv) .* reshape(dZdy,szY(1),[])),szY);
-clear szX szY fu fv dZdx dZdy
+v = reshape(((-Const.g./fb) .* reshape(dZdx,szX(1),[])),szX);
+u = reshape(((-Const.g./fa) .* reshape(dZdy,szY(1),[])),szY);
+clear szX szY fa fb dZdx dZdy
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% fix scales, and done
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-u_lon = Data.LonScale(1:end-1)+diff(Data.LonScale)./2;
-v_lat = Data.LatScale(1:end-1)+diff(Data.LatScale)./2;
+v_lon = Data.LonScale(1:end-1)+diff(Data.LonScale)./2;
+u_lat = Data.LatScale(1:end-1)+diff(Data.LatScale)./2;
 
 return
