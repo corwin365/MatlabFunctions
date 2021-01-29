@@ -217,12 +217,19 @@ try
   addParameter(p,'NoISCheck',   'false',@islogical);  %assumes we want to check any input structures 
   addParameter(p,'Python',      'false',@islogical);  %assumes we aren't calling this from Python
   
-
+  %do we want to interpolate to a constant vertical scale?
+  %this will be from the middle of the scale outwards, as AIRS
+  %resolution is best there
+  CheckZI = @(x) validateattributes(x,{'numeric'},{'nonnegative'}); 
+  addParameter(p,'VerticallyInterpolate','true',@islogical);  %assumes we want to 
+  addParameter(p,'VerticalSpacing',3,CheckZI);                %assume 3km if we do
+  
+  
   %Interpolant must be a string from the approved list
   ExpectedInterpolants = {'linear','nearest','natural'};
   addParameter(p,'Interpolant','linear',@(x) any(validatestring(x,ExpectedInterpolants)));  %assumes linear
   
-  %Interpolant must be a string from the approved list
+  %Extrapolant must be a string from the approved list
   ExpectedExtrapolants = {'linear','nearest','none'};
   addParameter(p,'Extrapolant','none',@(x) any(validatestring(x,ExpectedExtrapolants)));  %assumes linear  
   
@@ -363,7 +370,7 @@ end
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% regularise the data
+%% regularise the data in the horizontal
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 try
@@ -379,8 +386,48 @@ catch
   return
 end
 
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% interpolate the data to a regular vertical grid?
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
+if Input.VerticallyInterpolate
+  
+  %reshape data to do interpolation in one 1d pass
+  sz = size(Airs.ret_temp);
+  T = reshape(Airs.ret_temp,sz(1)*sz(2),sz(3));
+  
+  %find middle level. Force this to be a level, not an average of two others
+  Middle = median(Airs.ret_z);
+  if ~ismember(Middle,Airs.ret_z); 
+    [~,zidx] = min(abs(Airs.ret_z -Middle));
+    Middle = Airs.ret_z(zidx); clear zidx;
+  end
+  
+  %find middle-relative z-range
+  ZRange = [min(Airs.ret_z),max(Airs.ret_z)] - Middle;
+  
+  %create new scale
+  NewZ = (min(ZRange):Input.VerticalSpacing:max(ZRange))' + Middle;
+  
+  %interpolate
+  T = interp1(Airs.ret_z,T',NewZ)';
+  
+  %reshape back
+  T = reshape(T,sz(1),sz(2),numel(NewZ));
+  
+  %and store
+  Airs.ret_temp = T;
+  Airs.ret_z    = NewZ;
+  Spacing(3)    = Input.VerticalSpacing;
+  
+  clear T NewZ Middle ZRange sz
 
+else
+  
+  %vertical spacing is not regular, so set it to NaN
+  Spacing(3) = NaN;
+  
+end
 
 
 

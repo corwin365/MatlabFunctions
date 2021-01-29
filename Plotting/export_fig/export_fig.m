@@ -1717,30 +1717,30 @@ end
 
 % Check for newer version (only once a day)
 function isNewerVersionAvailable = checkForNewerVersion(currentVersion)
-    persistent lastCheckTime lastVersion
-    isNewerVersionAvailable = false;
-    if nargin < 1 || isempty(lastCheckTime) || now - lastCheckTime > 1
-        url = 'https://raw.githubusercontent.com/altmany/export_fig/master/export_fig.m';
-        try
-            str = readURL(url);
-            regexStr = '\n\s+checkForNewerVersion\(([^)]+)\)';
-            [unused,unused,unused,unused,latestVerStr] = regexp(str, regexStr); %#ok<ASGLU>
-            latestVersion = str2double(latestVerStr{1}{1});
-            if nargin < 1, currentVersion = lastVersion; end
-            isNewerVersionAvailable = latestVersion > currentVersion;
-            if isNewerVersionAvailable
-                msg = 'A newer version of export_fig is available. You can download it from GitHub or Matlab File Exchange, or run export_fig(''-update'') to install it directly.';
-                msg = hyperlink('https://github.com/altmany/export_fig', 'GitHub', msg);
-                msg = hyperlink('https://www.mathworks.com/matlabcentral/fileexchange/23629-export_fig', 'Matlab File Exchange', msg);
-                msg = hyperlink('matlab:export_fig(''-update'')', 'export_fig(''-update'')', msg);
-                warning('export_fig:version',msg);
-            end
-        catch
-            % ignore
-        end
-        lastCheckTime = now;
-        lastVersion = currentVersion;
-    end
+% % % % %     persistent lastCheckTime lastVersion
+% % % % %     isNewerVersionAvailable = false;
+% % % % %     if nargin < 1 || isempty(lastCheckTime) || now - lastCheckTime > 1
+% % % % %         url = 'https://raw.githubusercontent.com/altmany/export_fig/master/export_fig.m';
+% % % % %         try
+% % % % %             str = readURL(url);
+% % % % %             regexStr = '\n\s+checkForNewerVersion\(([^)]+)\)';
+% % % % %             [unused,unused,unused,unused,latestVerStr] = regexp(str, regexStr); %#ok<ASGLU>
+% % % % %             latestVersion = str2double(latestVerStr{1}{1});
+% % % % %             if nargin < 1, currentVersion = lastVersion; end
+% % % % %             isNewerVersionAvailable = latestVersion > currentVersion;
+% % % % %             if isNewerVersionAvailable
+% % % % %                 msg = 'A newer version of export_fig is available. You can download it from GitHub or Matlab File Exchange, or run export_fig(''-update'') to install it directly.';
+% % % % %                 msg = hyperlink('https://github.com/altmany/export_fig', 'GitHub', msg);
+% % % % %                 msg = hyperlink('https://www.mathworks.com/matlabcentral/fileexchange/23629-export_fig', 'Matlab File Exchange', msg);
+% % % % %                 msg = hyperlink('matlab:export_fig(''-update'')', 'export_fig(''-update'')', msg);
+% % % % %                 warning('export_fig:version',msg);
+% % % % %             end
+% % % % %         catch
+% % % % %             % ignore
+% % % % %         end
+% % % % %         lastCheckTime = now;
+% % % % %         lastVersion = currentVersion;
+% % % % %     end
 end
 
 % Update the installed version of export_fig from the latest version online

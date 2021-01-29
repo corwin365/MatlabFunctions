@@ -136,43 +136,6 @@ addParameter(p,'MinWaveLength',[1,1,1].*0,CheckLambda);  %zero default
 
 
 
-
-%inputs - extra settings for 2D+1 ST
-%%%%%%%%%%%%%%%%%%%%%%%%%
-
-%these will come in as a struct, which must exist and is parsed here
-%note that the individual flags WILL NOT BE SANITY-CHECKED - cave usor...
-
-%first, check if we're doing a 2D call. Then parse out the fields
-a = find(strcmp(varargin,'TwoDPlusOne'));
-if numel(a) > 0;
-  if varargin{a+1} == 1;
-    
-    %defaults - override if they don't exist in the call
-    TwoDSettings.c1          = [1,1].*1;               %c for  first pass (coarse in space, fine in freq)
-    TwoDSettings.c2          = [1,1].*0.25;              %c for second pass (coarse in freq, fine in space)
-    TwoDSettings.NPeaks      = 1;                        %number of spectral peaks to identify for each spatial point
-    TwoDSettings.Threshold   = 0;                        %threshold in spectral space to be identified as a peak. This is an amplitude for a lone 2DST (as opposed to a cospectrum)
-    TwoDSettings.Filt        = fspecial('gaussian',5,1); %characteristic size of point in spectral space. This is a little fatter than the default, to avoid very close peaks.
-    TwoDSettings.Thin        = 1;                        %thin out the number of scales (large runtime reduction, but changes the results)
-    TwoDSettings.Steps       = 2;%[1,2,3,4,5];           %number of steps to take phase difference over. '0' takes it from a basis level, defined above, while nonzero values use the phase shift with that many levels *above*
-    TwoDSettings.Weight      = 0;                        %height-weight the vertical layers
-
-    b = find(strcmp(varargin,'TwoDPlusOneSettings'));
-    if numel(b) > 0;
-      InStruct = varargin{b+1};  Flags = fieldnames(TwoDSettings);
-      for iFlag=1:1:numel(Flags)
-        if isfield(InStruct,Flags{iFlag}); TwoDSettings.(Flags{iFlag}) = InStruct.(Flags{iFlag}); end
-      end
-    end
-  end  
-end; clear a b iFlag Flags InStruct
-
-
-
-
-
-
 %parse the inputs, and tidy up
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -319,16 +282,19 @@ end
 
 if     Input.TwoDPlusOne;    
   
-  %standard version - uses fitted horizontal wavelengths from 3DST
-  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+  %needs a point spacing specified - if not set, use 1 (i.e. in units of
+  %gridpoints)
+  Spacing = Input.Spacing; Spacing(isnan(Spacing)) = 1;
   
-  %settings for 2D+1. consider moving these to primary inputs after testing.
-  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    
-  NewFields = get_airs_2dp1_lambdaz(Airs,Extra,TwoDSettings);
-  clear TwoDSettings
+  %do operation
+  NewFields = nph_2dst_plus1(Airs.Tp,Input.NScales,Spacing,Input.c, ...
+                             'minwavelengths',Input.MinWaveLength, ...
+                             'maxwavelengths',Input.MaxWaveLength);
+  clear Spacing
   
-  
+  %tidy up unwanted variables
+  NewFields = rmfield(NewFields,{'type','IN','scales','point_spacing','c','freqs'});
+
   %add those fields to the main ST array
   Fields = fieldnames(NewFields);
   for iF=1:1:numel(Fields);
