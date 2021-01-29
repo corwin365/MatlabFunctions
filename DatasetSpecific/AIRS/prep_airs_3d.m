@@ -328,7 +328,7 @@ if numel(fieldnames(Input.InputStruct)) == 0;
 else
 
   %test the validity of the structure, and use it is valid
-%   if Input.NoISCheck == 0;
+  if Input.NoISCheck == 0;
     [Airs,Check.Error,Check.ErrorInfo] = check_input_struct(Input);
     
     if Check.Error ~= 0;
@@ -337,9 +337,9 @@ else
       ErrorInfo = Check.ErrorInfo;
       return
     end
-%   else
-%     Airs = Input.InputStruct; %BE CAREFUL!!
-%   end
+  else
+    Airs = Input.InputStruct; %BE CAREFUL!!
+  end
   
   %all fine - tidy up and continue
   Input = rmfield(Input,'InputStruct');
