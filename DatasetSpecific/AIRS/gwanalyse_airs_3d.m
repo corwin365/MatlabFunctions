@@ -13,12 +13,14 @@ function [ST,Airs,Error,ErrorInfo] = gwanalyse_airs_3d(Airs,varargin)
 %controlled. To use the more advanced features, use the NDST routine
 %directly.
 %
-%ASSUMES DATA ARE ALREADY REGULARLY SPACED, OR AT LEAST WILL BE AFTER
-%HEIGHT SUBSETTING. 
+%ASSUMES DATA ARE ALREADY REGULARLY SPACED
+%
 %
 %REQUIRES the following external functions:
 % nph_ndst
-% gwanalyse_airs_2d (only if we request 2D+1 output)
+% nph_finddomfreqs (for 2D+1)
+% nph_ndst_dev     (for 2D+1)
+% nph_2dst_plus1   (for 2D+1)
 %
 %INCLUDES the following functions written by others:
 % Neil Hindley: nph_haversine,scale_height (n.hindley@bath.ac.uk)
@@ -261,7 +263,6 @@ ST = nph_ndst(Airs.Tp,                                ...
               Input.c,                                ...
               'maxwavelengths', Input.MaxWaveLength , ...
               'minwavelengths', Input.MinWaveLength);
-clear PointSpacing
 
 
 if Input.HeightScaling;
@@ -282,16 +283,13 @@ end
 
 if     Input.TwoDPlusOne;    
   
-  %needs a point spacing specified - if not set, use 1 (i.e. in units of
-  %gridpoints)
-  Spacing = Input.Spacing; Spacing(isnan(Spacing)) = 1;
   
   %do operation
-  NewFields = nph_2dst_plus1(Airs.Tp,Input.NScales,Spacing,Input.c, ...
+  NewFields = nph_2dst_plus1(Airs.Tp,Input.NScales,PointSpacing,Input.c, ...
                              'minwavelengths',Input.MinWaveLength, ...
                              'maxwavelengths',Input.MaxWaveLength);
   clear Spacing
-  
+
   %tidy up unwanted variables
   NewFields = rmfield(NewFields,{'type','IN','scales','point_spacing','c','freqs'});
 
