@@ -281,7 +281,7 @@ end
 %if requested, also use the 2D+1 method to compute vertical wavelength
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-if     Input.TwoDPlusOne;    
+if  Input.TwoDPlusOne;    
   
   
   %do operation
@@ -331,6 +331,14 @@ ST.l = ST.kh .* cosd(ang_north);
 
 %finally, m 
 ST.m = ST.F3;
+
+%same for 2D+1, if done
+if  Input.TwoDPlusOne;  
+  ST.kh_2dp1 = quadadd(ST.F1_2dp1,ST.F2_2dp1);
+  ST.k_2dp1  = ST.kh_2dp1 .* sind(ang_north);
+  ST.l_2dp1  = ST.kh_2dp1 .* cosd(ang_north);
+  ST.m_2dp1  = ST.F3_2dp1;
+end
 
 
 clear sz ang_at az_at ang_north xt_mid

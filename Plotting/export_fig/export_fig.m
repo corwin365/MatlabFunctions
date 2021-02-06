@@ -1118,7 +1118,7 @@ function [imageData, alpha] = export_fig(varargin) %#ok<*STRCL1>
     catch err
         % Display possible workarounds before the error message
         if displaySuggestedWorkarounds && ~strcmpi(err.message,'export_fig error')
-            isNewerVersionAvailable = checkForNewerVersion();  % alert if a newer version exists
+            isNewerVersionAvailable = 0;%checkForNewerVersion();  % alert if a newer version exists
             if isempty(regexpi(err.message,'Ghostscript'))
                 fprintf(2, 'export_fig error. ');
             end
