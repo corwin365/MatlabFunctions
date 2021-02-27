@@ -271,6 +271,9 @@ if Input.HeightScaling;
   ST.HA   = ST.HA   ./ CFac;
   ST.R    = ST.R    ./ CFac;
   ST.HR   = ST.HR   ./ CFac;
+  ST.IN_scaled = ST.IN;
+  ST.IN   = ST.IN   ./ CFac;
+  
   
   
   clear CFac

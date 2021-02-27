@@ -1,8 +1,18 @@
 function [Topography,Map,CloudMap,ShapeData] = topo_etc(LonBox,LatBox,GreyScale,Modis,NatEarth,HRNatEarth)
 
+
+%logic has some trouble with ending at exactly 180 or 90 degrees:
+if LonBox(1) == -180; LonBox(1) = -179.999; end
+if LatBox(1) ==  -90; LatBox(1) =  -89.999; end
+if LonBox(2) ==  180; LonBox(2) =  179.999; end
+if LatBox(2) ==   90; LatBox(2) =   89.999; end
+
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %get topography, coastline etc layers for a given region's 3D plot
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
 
 %replace map with ...
 if exist('GreyScale')  ==0; GreyScale = 0;   end;  %greyscale map
