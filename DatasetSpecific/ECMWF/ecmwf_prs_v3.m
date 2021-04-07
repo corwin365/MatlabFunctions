@@ -15,15 +15,12 @@ function [Pressure,Altitude] = ecmwf_prs_v3(NLevs,LnSP)
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 
-%check if we have a map of log surface pressure, or assume 1000hPa?
+%do we have log surface pressure, or do we assume 1000hPa?
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 if nargin < 2;
   %assume 1000 hPa
   LnSP   = log(1000.*100);
-  OutDim = 1; %dimension to vary pressure over in output
-else
-  OutDim = ndims(LnSP)+1; %put in the first empty dimension
 end
 
 
