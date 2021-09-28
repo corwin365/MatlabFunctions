@@ -63,8 +63,8 @@ function [ST,Airs,Error,ErrorInfo] = gwanalyse_airs_3d(Airs,varargin)
 %    HeightScaling   (logical,           true)  scale data for height before ST (undone afterwards)
 %    Spacing         (array,    [NaN,NaN,NaN])  element spacing computed externally
 %    c               (array, [0.25,0.25,0.25])  s-transform c parameter
-%    MinWaveLength   (array,   [1,1,1].*99e99)  minimum output wavelength
-%    MaxWaveLength   (array,          [0,0,0])  maximum output wavelength
+%    MinWaveLength   (array,          [0,0,0])  minimum output wavelength
+%    MaxWaveLength   (array,   [1,1,1].*99e99)  maximum output wavelength
 %    NotAirsData     (logical,          false)  overrides some of the sanity checks on AIRS data formatting
 %    TwoDPlusOne     (logical,          false)  *ADDITIONALLY* compute vertical wavelengths with 2D+1 method
 %

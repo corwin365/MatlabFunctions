@@ -44,8 +44,7 @@ loc1 = deg2rad(loc1); loc2 = deg2rad(loc2);
 R = 6371;                                 % Earth's radius in km
 delta_lat = loc2(:,1) - loc1(:,1);        % difference in latitude
 delta_lon = loc2(:,2) - loc1(:,2);        % difference in longitude
-a = sin(delta_lat./2).^2 + cos(loc1(:,1)) .* cos(loc2(:,1)) .* ...
-    sin(delta_lon./2).^2;
+a = sin(delta_lat./2).^2 + cos(loc1(:,1)) .* cos(loc2(:,1)) .* sin(delta_lon./2).^2;
 c = 2 .* atan2(sqrt(a), sqrt(1-a));
 km = R .* c;
 

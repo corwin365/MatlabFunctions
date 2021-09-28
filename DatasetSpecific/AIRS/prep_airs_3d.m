@@ -635,10 +635,10 @@ Time = Airs.l1_time;
 T    = Airs.ret_temp;
 
 %find granule size. use mean of all rows/cols, as there are slight variations between them
-AlongTrackSize  = min(nph_haversine([Airs.l1_lat(:,  1),Airs.l1_lon(  :,1)], ...
-                                     [Airs.l1_lat(:,end),Airs.l1_lon(:,end)]));
+AlongTrackSize  = min(nph_haversine([Airs.l1_lat(:,  1), Airs.l1_lon(  :,1)], ...
+                                    [Airs.l1_lat(:,end), Airs.l1_lon(:,end)]));
 AcrossTrackSize = min(nph_haversine([Airs.l1_lat(1,  :)',Airs.l1_lon(  1,:)'], ...
-                                     [Airs.l1_lat(end,:)',Airs.l1_lon(end,:)']));
+                                    [Airs.l1_lat(end,:)',Airs.l1_lon(end,:)']));
 
 
 %define a new grid relative to granule bottom left
@@ -703,7 +703,9 @@ at_vec = d_at;
 xt_spacing = dXT;%mean(diff(xt_vec));
 
 % use reckon to find new lats and lons:
-[latout,lonout] = reckon(repmat(lat(xt_mid,:),size(t,1),1),repmat(lon(xt_mid,:),size(t,1),1),km2deg(XT),repmat(az_at+90,size(t,1),1));
+[latout,lonout] = reckon(repmat(lat(xt_mid,:),size(t,1),1),repmat(lon(xt_mid,:),size(t,1),1), ...
+                         km2deg(XT), ...
+                         repmat(az_at+90,size(t,1),1));
 
 % interp each level:
 ti = nan(size(t));

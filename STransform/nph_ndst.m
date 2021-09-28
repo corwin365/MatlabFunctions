@@ -306,6 +306,7 @@ if any(strcmpi(options,'minwavelengths'))
     minwavelengths = abs(varargin{(find(strcmpi(varargin,'minwavelengths'))+1)});
 end
 
+
 %% PARSE INPUT SIZES AND SCALES ===========================================
 
 switch type
