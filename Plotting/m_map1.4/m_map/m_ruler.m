@@ -55,7 +55,8 @@ gfontsize=get(gca,'fontsize');
 gfontname=get(gca,'fontname');
 gticklen=get(gca,'ticklength'); gticklen=gticklen(1); 
 gtickdir=get(gca,'tickdir'); 
- 
+gfontcolor='k';
+
 if MAP_PROJECTION.newgraphics
  gticklen=gticklen*3;
 end
@@ -81,6 +82,8 @@ while k<=length(varargin)
            gfontsize=varargin{k+1};
          case 'fontn'
            gfontname=varargin{k+1};
+         case 'fontc'
+           gfontcolor=varargin{k+1};
        end
     case 'tic'
        switch lower(varargin{k}(1:5))
@@ -97,6 +100,7 @@ while k<=length(varargin)
       disp('      ''linestyle'', ( linespec | ''none'' )');
       disp('      ''fontsize'',value');
       disp('      ''fontname'',name');
+      disp('      ''fontcolor'',colorspec');
        return;
     case 'set'
       disp(['      ticklength = ' num2str(gticklen)]);
@@ -106,6 +110,7 @@ while k<=length(varargin)
       disp(['      linestyle = ' glinestyle]);
       disp(['      fontsize = ' num2str(gfontsize)]);
       disp(['      fontname = ' gfontname]);
+      disp(['      fontcolor = ' gfontcolor]);
        return;
       otherwise
        disp([' Unknown option: ' varargin{k}]);     
@@ -215,18 +220,18 @@ if horiz
   if nints>1
     for k=1:nints+1
       text(posx(1)+dist(k)/scfac,posy(1)-diff(ylm)*gticklen,num2str(dist(k)/numfac), ...
-          'fontsize',gfontsize,'fontname',gfontname,...
+          'fontsize',gfontsize,'fontname',gfontname,'color',gfontcolor,...
          'verticalalignment','top','horizontalalignment','center','tag','m_ruler_label');
     end
   %  text(posx(1)+dist(nints+1)/scfac,posy(1)-diff(ylm)*gticklen*2,sprintf('%d km',dist(end)/numfac),...
   %        'fontsize',gfontsize,'fontname',gfontname,...
   %        'verticalalignment','top','horizontalalignment','center','tag','m_ruler_label');
     text(posx(1)+diff(posx)/2,posy(1)+diff(ylm)*gticklen,units,...
-          'fontsize',gfontsize,'fontname',gfontname,...
+          'fontsize',gfontsize,'fontname',gfontname,'color',gfontcolor,...
           'verticalalignment','bottom','horizontalalignment','center','tag','m_ruler_label');
   else 
     text(posx(1)+mean(dist)/scfac,posy(1)-diff(ylm)*gticklen*2,[num2str(dist(end)/numfac) units],...
-          'fontsize',gfontsize,'fontname',gfontname,...
+          'fontsize',gfontsize,'fontname',gfontname,'color',gfontcolor,...
           'verticalalignment','top','horizontalalignment','center','tag','m_ruler_label');
   end
   
@@ -265,15 +270,15 @@ else
   if nints>1
     for k=1:nints
       text(posx(1)+diff(xlm)*gticklen*2,posy(1)+dist(k)/scfac,num2str(dist(k)/numfac), ...
-          'fontsize',gfontsize,'fontname',gfontname,...
+          'fontsize',gfontsize,'fontname',gfontname,'color',gfontcolor,...
          'verticalalignment','middle','horizontalalignment','left','tag','m_ruler_label');
     end
     text(posx(1)+diff(xlm)*gticklen*2,posy(1)+dist(nints+1)/scfac,[num2str(dist(end)/numfac) units],...
-          'fontsize',gfontsize,'fontname',gfontname,...
+          'fontsize',gfontsize,'fontname',gfontname,'color',gfontcolor,...
           'verticalalignment','middle','horizontalalignment','left','tag','m_ruler_label');
   else  
     text(posx(1)+diff(xlm)*gticklen*2,posy(1)+mean(dist)/scfac,[num2str(dist(end)/numfac) units],...
-          'fontsize',gfontsize,'fontname',gfontname,...
+          'fontsize',gfontsize,'fontname',gfontname,'color',gfontcolor,...
           'verticalalignment','middle','horizontalalignment','left','tag','m_ruler_label');
   end
 end

@@ -11,7 +11,9 @@ function [h,varargout]=m_ellipse(long,lat,fmaj,fmin,finc,fpha,scl,tpe,varargin)
 %      INC:       ellipse inclination (degrees CCW of East)
 %      PHA:       phase in degrees (useful for tidal ellipses)
 %                 set to [] when not needed (will also omit phase lines)
-%      SCALE:     scale factor (set to [] for default scale)
+%      SCALE:     scale factor (set to [] for default scale, which is
+%                 3000 per degree of latitude). Setting SCALE to be
+%                 2 will mean 3000/2 per degree of latitude.
 %      TYPE:      'patch' or 'line'
 %      VARARGIN   options passed to the patch or line objects
 %       

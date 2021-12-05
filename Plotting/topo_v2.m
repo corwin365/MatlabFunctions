@@ -11,7 +11,7 @@ function [Topo,Coasts,Image] = topo_v2(LonBox,LatBox,varargin)
 %    lonbox: two-element array [min lon, max lon], in range -360 to +360
 %    latbox: two-element array [min lat, max lat], in range -90 to +90
 %  optional:
-%    'Image': image to load, one of 'GreyScale', 'Modis','NatEarth','HRNatEarth', 'land_ocean_ice'
+%    'Image': image to load, one of 'GreyScale', 'Modis','NatEarth','HRNatEarth', 'land_ocean_ice', 'pale'
 %
 %outputs:
 %  Topo:   struct containing grid of lons, lat and elevation values for the chosen region
@@ -43,6 +43,9 @@ Topo.elev = Topo.elev./1000; %scale to km
 
 
 %duplicate out so we can use -180 to +180 or 0-360 scales
+Topo.lons = Topo.lons(:,1:end-1);
+Topo.lats = Topo.lats(:,1:end-1);
+Topo.elev = Topo.elev(:,1:end-1);
 Topo.elev = [Topo.elev,    Topo.elev,Topo.elev    ];
 Topo.lats = [Topo.lats,    Topo.lats,Topo.lats    ];
 Topo.lons = [Topo.lons-360,Topo.lons,Topo.lons+360];
@@ -63,6 +66,9 @@ if numel(idx) > 0;
     case 'NatEarth';       Path = 'ne/rasterI/NE1_50M_SR_W.tif';
     case 'HRNatEarth';     Path = 'ne/rasterI/HYP_HR_SR_OB_DR.tif';
     case 'land_ocean_ice'; Path = 'imagery/land_ocean_ice_8192.png';
+    case 'faded';          Path = 'imagery/faded.jpg';
+    case 'pale';           Path = 'imagery/pale.png';
+      
     otherwise;
       disp('Image specified not location, skipping load')
       Skip = 1;
@@ -83,14 +89,15 @@ if numel(idx) > 0;
   if strcmp(ImageToLoad{1},'GreyScale'); Image.Map = repmat(Image.Map,1,1,3); end
     
   %create corresponding lat and lon arrays (assumes Mercator projection)
-  Image.Lon = -180:360/size(Image.Map,2):180;
-  Image.Lat = 90:-180/size( Image.Map,1):-90;
+  Image.Lon = linspace(-180,180,1+size(Image.Map,2)); Image.Lon = Image.Lon(1:end-1);
+  Image.Lat = linspace(  90,-90,1+size(Image.Map,1)); Image.Lat = Image.Lat(1:end-1);
 
   %duplicate out
   Image.Map = [Image.Map,Image.Map,Image.Map];
   Image.Lon = [Image.Lon-360,Image.Lon,Image.Lon+360]; 
 
 end
+
 
 
 %load coastline data
@@ -128,6 +135,7 @@ y = inrange(Topo.lats(:,1),LatBox);
 Topo.lons = Topo.lons(y,:);  Topo.lons = Topo.lons(:,x);
 Topo.lats = Topo.lats(y,:);  Topo.lats = Topo.lats(:,x);
 Topo.elev = Topo.elev(y,:);  Topo.elev = Topo.elev(:,x);
+
 
 %imagery
 if exist('Image','var');

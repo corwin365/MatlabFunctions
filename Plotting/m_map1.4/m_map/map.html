@@ -34,7 +34,7 @@
  <li><a href="./map.html#ack">Acknowledgements</a></li>
 </ul>   
 
-<p class="menu"> Last changed 20/Jan/2020. Questions and comments to <a
+<p class="menu"> Last changed 20/Apr/2021. Questions and comments to <a
  href="mailto:rich@eos.ubc.ca">rich@eos.ubc.ca</a></p> 
   
   </div>
@@ -42,24 +42,24 @@
   <div class="column right">
   <a name="intro"></a>
        <h1> <a > M_Map:</a></h1>      
-      <h2> A mapping package for <a href="http://www.mathworks.com">Matlab</a> </h2>
+      <h2> A mapping package for <a href="https://www.mathworks.com">Matlab</a> </h2>
 
 <hr>
 
-<p> You have collected your data, loaded it into</a> <a href="http://www.mathworks.com">Matlab</a>, analyzed everything to
+<p> You have collected your data, loaded it into</a> <a href="https://www.mathworks.com">Matlab</a>, analyzed everything to
 death, and now you want to make a simple map showing how it relates to the world. </p>
 
 <p>But you can't. </p>
 
 <p>Instead you have to figure out how to save all your data, and then
-read it into another program (like, for example <a href="http://gmt.soest.hawaii.edu">GMT</a>), and then spend all that
+read it into another program (like, for example <a href="https://www.generic-mapping-tools.org/">GMT</a>), and then spend all that
 extra time figuring out why it doesn't give you what you expected it
 would...or you can invest in Matlab's own mapping toolbox (with a similarly steep learning curve)... or not! </p>
 
 
 
 
-<h2> Announcing M_Map v1.4m! <br> (released Feb/2020)</h2>
+<h2> Announcing M_Map v1.4n! <br> (released Sept/2021)</h2>
 
 
 
@@ -202,9 +202,10 @@ bathymetry databases.</li>
 <h2> <a name="download"></a>How to get M_Map</h2>
 
 <p>You can download the M_Map toolbox either as a <a
- href="http://www.eos.ubc.ca/%7Erich/m_map1.4.tar.gz">gzipped tar-file </a>,
-or as <a href="http://www.eos.ubc.ca/%7Erich/m_map1.4.zip">zip archive
-</a>(Click on these links to download). If you are unpacking the zip
+ href="https://www.eos.ubc.ca/%7Erich/m_map1.4.tar.gz">gzipped tar-file </a>,
+or as <a href="https://www.eos.ubc.ca/%7Erich/m_map1.4.zip">zip archive
+</a>(Click on these links to download - note, some problems with this have been reported by users of the Chrome
+web browser). If you are unpacking the zip
 file MAKE SURE YOU
 ALSO UNPACK SUBDIRECTORIES! Both are around 650k in size. Once you have
 this
@@ -234,7 +235,15 @@ automatically adding names to your map), through its home page at
 <hr>
 <h2> <a name="relnotes"> Release Notes</a></h2>
 
-<p>New in release 1.4m (Feb/2020):<img src="././doc/new.gif" align="left"></p>
+<p>New in release 1.4n (Sep/2021):<img src="././doc/new.gif" align="left"></p>
+<ol>
+<li> Created a separate <code>/data</code> directory for coastline databases (instead of defaulting them into
+<code>/private</code>).</li>
+<li> Updated OCTAVE compatability </li>
+ 
+</ol>
+
+<p>New in release 1.4m (Feb/2020): </p>
 <ol>
 <li> Added cylindrical equal-area projection for completeness (don't recommend using it though!)</li>
 <li> Added <code>m_ginput</code> to assist in mouse-driven point selection. </li>
@@ -283,7 +292,7 @@ minor graphics improvements.
 </ol>
 <p>  New in release 1.4g (Jan/2014) are</p>
 <ol>
-  <li><code>m_ellipse.m</code> to plot tidal ellipses (say, from <a href="http://www.eos.ubc.ca/~rich/index.html#T_Tide"> T_Tide </a>)
+  <li><code>m_ellipse.m</code> to plot tidal ellipses (say, from <a href="https://www.eos.ubc.ca/~rich/index.html#T_Tide"> T_Tide </a>)
   <li>Option to use either decimal-degrees or degrees/decimal-minutes in grid axis labels
   <li> Matlab 2013b has a bad bug in the <code>dataaspectratio</code> axes property that affects pretty much everything graphical. This version of
   M_Map has a workaround that MOSTLY works, but it would
@@ -291,7 +300,7 @@ minor graphics improvements.
   </ol>
 <p>New in release 1.4f (May/2012) are</p>
 <ol>
-  <li><code>m_shaperead.m </code>to read SHAPEFILES! (so <a href="http://www.naturalearthdata.com/">Natural Earth</a> can be
+  <li><code>m_shaperead.m </code>to read SHAPEFILES! (so <a href="https://www.naturalearthdata.com/">Natural Earth</a> can be
   used for political boundaries instead of DCW, among other opportunities) </li>
   <li>gshhs version 2 support</li>
   <li> partial OCTAVE compatibility </li>
@@ -855,7 +864,7 @@ axb.YTick=levels;
 
 <pre>
  % NOAA/NASA Pathfinder AVHRR SST product
- % http://podaac.jpl.nasa.gov/sst/
+ % https://podaac.jpl.nasa.gov/sst/
  
  [P,map]=imread('../m_mapWK/199911h54ma-gdm.hdf');
  
@@ -903,7 +912,7 @@ on a fixed grid) (HDF format)</h4>
 % Brodzik, M. J. and J. S. Stewart. 2016. Near-Real-Time SSM/I-SSMIS EASE-Grid 
 % Daily Global Ice Concentration and Snow Extent, Version 5. Boulder, Colorado 
 % USA. NASA National Snow and Ice Data Center Distributed Active Archive Center. 
-% doi: http://dx.doi.org/10.5067/3KB2JPLFPK3R.
+% doi: https://dx.doi.org/10.5067/3KB2JPLFPK3R.
 
 Q=hdfinfo('NISE_SSMISF18_20171124.HDFEOS')
 %  Q.Attributes(2).Value says
@@ -1092,7 +1101,7 @@ colormap(flipud(m_colmap('Blues')))
 <pre>
 % Argo stuff
 % Go to:
-%         http://www.usgodae.org/cgi-bin/argo_select.pl
+%         https://www.usgodae.org/cgi-bin/argo_select.pl
 % Select area you want and date range, download all profiles
 % tar -xvzf them into directory...
 basname='./argo';

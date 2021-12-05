@@ -64,11 +64,13 @@ function h=m_gshhs(resolution,varargin)
 % Sep/14 - added hierarchy to borders
 % Aug/18 - fixed error that occurred when called m_gshhs_X with 'save'
 %          option (Thanks to H. Grant for pointing this out).
-
+% Dec/20 - moved all files into a /data subdirectory
 
 % Root of directories where all the gshhs_X.b, wdb_borders-X.b and wdb_rivers_X.b
 % files live
-FILNAME='private/';
+% Construct the complete  filename by starting with the location of this
+% file and adding /data/:
+FILNAME=[fileparts(which('m_gshhs.m')) '/data/'];
 
 
 %-------------don't change below here----------------------------

@@ -47,7 +47,7 @@ switch proj
       end
     else
       k=m_match(varargin{1},projections(:).name);
-      eval(['X=' projections(k).routine '(''set'',projections(k).name);']);
+      X=eval([ projections(k).routine '(''set'',projections(k).name);']);
       disp(X);
     end
 
@@ -58,14 +58,14 @@ switch proj
          m_proj('usage');
       else
          k=m_match(MAP_PROJECTION.name,projections(:).name);
-         eval(['X=' projections(k).routine '(''get'');']);
+         X=eval([projections(k).routine '(''get'');']);
          disp('Current mapping parameters -');
          disp(X);
       end
     else
       if isempty(MAP_PROJECTION)          
         k=m_match(varargin{1},projections(:).name);
-        eval(['X=' projections(k).routine '(''set'',projections(k).name);']);
+        X=eval([ projections(k).routine '(''set'',projections(k).name);']);
         X=strvcat(X, ...
                   ' ', ...
                   '**** No projection is currently defined      ****', ...
@@ -73,7 +73,7 @@ switch proj
         disp(X);
       else
 	    k=m_match(varargin{1},projections(:).name);
-	    eval(['X=' projections(k).routine '(''get'');']);
+	    X=eval([ projections(k).routine '(''get'');']);
 	    disp(X);
       end	
     end
@@ -138,6 +138,13 @@ switch proj
     if isempty(MAP_PROJECTION.version)
        MAP_PROJECTION.version=ver('octave');
     end
+    
+    % There are places to put toolboxes that cause ver('matlab') to return
+    % more than one entry, but if so the MATLAB version is the first.
+    if length(MAP_PROJECTION.version)>1
+        MAP_PROJECTION.version=MAP_PROJECTION.version(1);
+    end
+    
     if strcmp(MAP_PROJECTION.version.Name,'Octave')
        MAP_PROJECTION.IsOctave=true;
        MAP_PROJECTION.newgraphics=false;

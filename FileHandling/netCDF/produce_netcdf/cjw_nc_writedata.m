@@ -59,16 +59,40 @@ for iVar=1:1:numel(Variables)
   netcdf.putAtt(FileId,VarId,'long_name',Data.(Variables{iVar}).FullName);  
   netcdf.putAtt(FileId,VarId,'units',    Data.(Variables{iVar}).Units);      
   
-  %specify fill value
-  netcdf.defVarFill(FileId,VarId,false,Data.(Variables{iVar}).Fill);
-  
-  %now, replace any bad values in the data with the fill value...
-  v = Data.(Variables{iVar}).Data; 
-  v(isnan(v)) = Data.(Variables{iVar}).Fill;
-                      
 
-  %and write it
-  netcdf.putVar(FileId,VarId,v); 
+  %write data - different depending on if it's numeric or string
+  if strcmp(Data.(Variables{iVar}).Type,'string') ==1 
+
+    %string
+    %%%%%%%%%%%%%%%%%%%%%%%    
+
+    netcdf.putVar(FileId,VarId,string(Data.(Variables{iVar}).Data))
+
+  elseif strcmp(Data.(Variables{iVar}).Type,'char') ==1;
+
+    %char
+    %%%%%%%%%%%%%%%%%%%%%%%  
+
+    netcdf.putVar(FileId,VarId,char(Data.(Variables{iVar}).Data))    
+    
+  else
+
+    %numeric
+    %%%%%%%%%%%%%%%%%%%%%%%
+
+    %specify fill value
+    netcdf.defVarFill(FileId,VarId,false,Data.(Variables{iVar}).Fill);
+
+    %now, replace any bad values in the data with the fill value...
+    v = Data.(Variables{iVar}).Data;
+    v(isnan(v)) = Data.(Variables{iVar}).Fill;
+      
+    %and write it
+    netcdf.putVar(FileId,VarId,v); 
+
+  end
+
+
   
   %done!
   

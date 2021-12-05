@@ -3,8 +3,11 @@
 
 % Read a netcdf file's variables, attributes and other into a structure
 
-% EDIT 2018-05-24: Okay, getnet.m's been long overdue an overhaul, here
-% I've added the functionality to read attrributes from individual
+% Now called nph_getnet.m to distinguish from previous versions, which now
+% just call this function.
+
+% EDIT 2018-05-24: Okay, getnet's been long overdue an overhaul, here
+% I've added the functionality to read attributes from individual
 % variables, but have had to reorganise the structuring so I'm afraid it's
 % not retro-compatible any more. Sorry past-neil :(
 
@@ -21,7 +24,7 @@
 %
 
 
-function NC = getnet(filepath,varargin)
+function NC = nph_getnet(filepath,varargin)
 
 % filepath = '/Volumes/NJMitchell-Scratch/Data/neil/e5_southgeorgia/sg_01.nc';
 
@@ -42,23 +45,46 @@ for i = 1:length(nci.Variables)
 end
 
 %% Data %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%% If all the data is in variables, just load the variables...
+
+if any(strcmpi(varargin,'single'))
+    singleflag = 1;
+else
+    singleflag = 0;
+end
 
 NC.Data = struct;
 
 for i = 1:length(nci.Variables)
-    if any(strcmpi(varargin,'single'))
-        NC.Data.(nci.Variables(i).Name) = single(netcdf.getVar(ncid,i-1));
-    else
-        NC.Data.(nci.Variables(i).Name) = double(netcdf.getVar(ncid,i-1));
-    end
-        
+
+  % load data as netcdf
+  if singleflag
+    NC.Data.(nci.Variables(i).Name) = single(netcdf.getVar(ncid,i-1));
+  elseif any(strcmpi(nci.Variables(i).Datatype,'string'))
+    NC.Data.(nci.Variables(i).Name) = string(netcdf.getVar(ncid,i-1));
+  else
+    NC.Data.(nci.Variables(i).Name) = double(netcdf.getVar(ncid,i-1));
+  end
+
 end
+
+% %%%% Sometimes, all the data is in Groups first (like with VIIRS data).
+% %%%% This means we have to specify the Group as well to get the data.
+% if isempty(nci.Variables)
+%     for i = 1:length(nci.Groups)
+%         NC.Data.(nci.Groups(i).Name) = struct;
+%     end
+% end
 
 %% Apply scale factors and offsets if they exist %%%%%%%%%%%%%%%%%%%%%%%%%%
 % note these names are for the ECMWF netcdf formats, not clear if they'll
 % work for other formats, but you've got the attributes anyway now so you
 % can do it afterward.
 for i = 1:length(nci.Variables)
+    
+    % First check that there are actually some attributes for this
+    % variable...
+    if ~isempty(nci.Variables(i).Attributes)
     
     % Fill values to NaN:
     if any(strcmpi({nci.Variables(i).Attributes.Name},'_FillValue'))
@@ -81,6 +107,8 @@ for i = 1:length(nci.Variables)
     if any(strcmpi({nci.Variables(i).Attributes.Name},'add_offset'))
         ind = find(strcmpi({nci.Variables(i).Attributes.Name},'add_offset'));
         NC.Data.(nci.Variables(i).Name) = NC.Data.(nci.Variables(i).Name) + nci.Variables(i).Attributes(ind).Value;
+    end
+    
     end
     
 end
