@@ -11,7 +11,7 @@ function [Topo,Coasts,Image] = topo_v2(LonBox,LatBox,varargin)
 %    lonbox: two-element array [min lon, max lon], in range -360 to +360
 %    latbox: two-element array [min lat, max lat], in range -90 to +90
 %  optional:
-%    'Image': image to load, one of 'GreyScale', 'Modis','NatEarth','HRNatEarth', 'land_ocean_ice', 'pale'
+%    'Image': image to load, one of 'GreyScale', 'Modis','NatEarth','HRNatEarth', 'land_ocean_ice', 'pale','land_ocean_ice_cloud'
 %
 %outputs:
 %  Topo:   struct containing grid of lons, lat and elevation values for the chosen region
@@ -61,13 +61,14 @@ if numel(idx) > 0;
   ImageToLoad = varargin(idx+1);
   Skip = 0;
   switch ImageToLoad{1}
-    case 'GreyScale';      Path = 'imagery/greyscale.png';
-    case 'Modis';          Path = 'imagery/MODIS_Map.jpg';
-    case 'NatEarth';       Path = 'ne/rasterI/NE1_50M_SR_W.tif';
-    case 'HRNatEarth';     Path = 'ne/rasterI/HYP_HR_SR_OB_DR.tif';
-    case 'land_ocean_ice'; Path = 'imagery/land_ocean_ice_8192.png';
-    case 'faded';          Path = 'imagery/faded.jpg';
-    case 'pale';           Path = 'imagery/pale.png';
+    case 'GreyScale';            Path = 'imagery/greyscale.png';
+    case 'Modis';                Path = 'imagery/MODIS_Map.jpg';
+    case 'NatEarth';             Path = 'ne/rasterI/NE1_50M_SR_W.tif';
+    case 'HRNatEarth';           Path = 'ne/rasterI/HYP_HR_SR_OB_DR.tif';
+    case 'land_ocean_ice';       Path = 'imagery/land_ocean_ice_8192.png';
+    case 'land_ocean_ice_cloud'; Path = 'imagery/land_ocean_ice_cloud_8192.png';
+    case 'faded';                Path = 'imagery/faded.jpg';
+    case 'pale';                 Path = 'imagery/pale.png';
       
     otherwise;
       disp('Image specified not location, skipping load')

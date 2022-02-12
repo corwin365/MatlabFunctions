@@ -47,11 +47,11 @@ end
 
 if   NetCDF == 0 ;
   %HDF file
-  try;
-    AirsSwath = read_airs_swath(AirsFile,3);
-  catch;
+%   try;
+    AirsSwath = read_airs_swath_updated(AirsFile,3);
+%   catch;
     ReturnBT   = NaN;    ReturnLat  = NaN;    ReturnLon  = NaN;    ReturnTime = NaN;    return;
-  end;
+%   end;
 else
   %netCDF file
   AirsSwath = cjw_readnetCDF(AirsFile);
