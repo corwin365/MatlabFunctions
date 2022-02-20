@@ -2,7 +2,7 @@ function Goes = goes_latlon(Goes)
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%compute latitude and longitude for each point in GOES data
+%compute latitude and longitude for each point in GOES-17 data
 %
 %based on: https://makersportal.com/blog/2018/11/25/goes-r-satellite-latitude-and-longitude-grid-projection-algorithm
 %
@@ -12,11 +12,12 @@ function Goes = goes_latlon(Goes)
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-% GOES-R projection info 
-Req  = 6378137.0;
-Rpol = 6356752.31414;
-L0   = -75;
-Hsat = 35786023.0;
+%projection info 
+ProjId = find(contains({Goes.MetaData.Variables.Name},'goes_imager_projection'));
+Req  = Goes.MetaData.Variables(ProjId).Attributes(find(contains({Goes.MetaData.Variables(ProjId).Attributes.Name},'semi_major_axis'))).Value;
+Rpol = Goes.MetaData.Variables(ProjId).Attributes(find(contains({Goes.MetaData.Variables(ProjId).Attributes.Name},'semi_minor_axis'))).Value;
+L0   = Goes.MetaData.Variables(ProjId).Attributes(find(contains({Goes.MetaData.Variables(ProjId).Attributes.Name},'longitude_of_projection_origin'))).Value;
+Hsat = Goes.MetaData.Variables(ProjId).Attributes(find(contains({Goes.MetaData.Variables(ProjId).Attributes.Name},'perspective_point_height'))).Value;
 H    = Req + Hsat;
 
 %Data info
