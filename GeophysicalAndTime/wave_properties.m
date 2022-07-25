@@ -95,6 +95,7 @@ function [Intrinsic,True,f] = wave_properties(N,k,l,m,Latitude,U,V)
     
   %work out horizontal wavelength and angle
   kh = sqrt(k.^2 + l.^2);
+  (1/kh)/1000
   theta = atan2(l,k);
   
   %hence, work out phase *speed*

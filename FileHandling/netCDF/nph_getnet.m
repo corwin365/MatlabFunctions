@@ -35,9 +35,11 @@ ncid = netcdf.open(filepath,'nc_nowrite');
 % Assign output:
 NC = nci;
 
+
 %% Attributes %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 NC.Attributes = struct;
 NC.Attributes.Global = nci.Attributes;
+
 
 % ALSO ASSIGN ATTRIBUTES FROM VARIABLES TO THE ATTRIBUTES FIELD:
 for i = 1:length(nci.Variables)

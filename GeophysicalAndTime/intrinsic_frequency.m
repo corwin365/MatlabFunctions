@@ -98,8 +98,8 @@ function [OmegaHat,GroupVelocity,PhaseVelocity,f] = intrinsic_frequency(N,k,l,m,
   
   %test 1. magnitude. this also identifies which one is the scary one
   CutOffLambda = 2500e3; %2500km is quite big, compare AIRS swath ~1800km.
-  if abs(2*pi/k) > CutOffLambda; Tests(1) = Tests(1)+1; end
-  if abs(2*pi/l) > CutOffLambda; Tests(2) = Tests(2)+1; end
+  if abs(2*pi./k) > CutOffLambda; Tests(1) = Tests(1)+1; end
+  if abs(2*pi./l) > CutOffLambda; Tests(2) = Tests(2)+1; end
   clear CutOffLambda
   
   
