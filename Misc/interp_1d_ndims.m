@@ -32,6 +32,4 @@ NewOrder = [NewOrder(NewOrder < Dim)+1,1,NewOrder(NewOrder > Dim)];
 yi = permute(yi,NewOrder);
 
 
-return yi
-
-end
+return
