@@ -9,15 +9,15 @@ function [VarOut,PWStore] = pwfilter(NPWs,MinPC,Lon,Lat,Var,LonGrid,LatGrid,Alt,
 %Corwin Wright, c.wright@bath.ac.uk, 2022/09/23
 %
 %inputs (not in order - check above):
-% NPWs    - number of planetary wave modes to fit. Zonal mean will always be included
-% MinPC   - minimum percentage of filled bins in a longitude band before computing
+% NPWs    - number of planetary wave modes to fit. Zonal mean will always be included.
+% MinPC   - minimum percentage of filled bins in a longitude band to compute PWs - will set to NaN otherwise
 % Lon     - list of longitudes  at data points
 % Lat     - list of latitude    at data points
 % Alt     - list of altitudes   at data points (optional)
 % Var     - list of data values at data points
-% LonGrid - longitude grid to use, and output for PW fields
-% LatGrid - latitude  grid to use, and output for PW fields
-% AltGrid - altitude  grid to use, and output for PW fields
+% LonGrid - longitude grid to compute results on (PW outputs will also be on this grid)
+% LatGrid - latitude  grid compute results on (PW outputs will also be on this grid)
+% AltGrid - altitude  grid compute results on (PW outputs will also be on this grid)
 %
 %Lon, Lat, Alt and Var must all be the same size in the same order, and will be flattened
 %LonGrid,LatGrid and AltGrid should be vectors, and will be meshgridded
@@ -33,26 +33,23 @@ function [VarOut,PWStore] = pwfilter(NPWs,MinPC,Lon,Lat,Var,LonGrid,LatGrid,Alt,
 %% check input validity
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-%create input parser
-p = inputParser;
-
-%specify required inputs
-addRequired(p,'NPWs',    @(x) validateattributes(x,{'numeric'},{'positive','integer'}));
-addRequired(p,'MinPC',   @(x) validateattributes(x,{'numeric'},{'nonnegative'}));
-addRequired(p,'Lon',     @isnumeric);
-addRequired(p,'Lat',     @isnumeric);
-addRequired(p,'Var',     @isnumeric);
-addRequired(p,'LonGrid', @(x) validateattributes(x,{'numeric'},{'>=',-180,'<=',360})); %to allow both -180 to +180 and 0 to 360, depending on the input lons
-addRequired(p,'LatGrid', @(x) validateattributes(x,{'numeric'},{'>=', -90,'<=', 90}));
-
-%specify optional inputs, by creating them if they don't exist then parsing them as normal
+%if we didn't specify altitude values and ranges, create dummy values
 if nargin ~= 9; Alt = ones(size(Lon)); AltGrid = 1;end
-addRequired(p,'Alt',    @(x) validateattributes(x,{'numeric'},{'nonnegative'}));
-addRequired(p,'AltGrid',@(x) validateattributes(x,{'numeric'},{'nonnegative'}));
 
-%parse!
+%check input types, ranges and consistency.
+p = inputParser;
+addRequired(p,'NPWs',    @(x) validateattributes(x,{'numeric'},{'positive','integer','scalar'}));
+addRequired(p,'MinPC',   @(x) validateattributes(x,{'numeric'},{'nonnegative','<=',100,'scalar'}));
+addRequired(p,'Lon',     @isnumeric);
+addRequired(p,'Lat',     @(x) validateattributes(x,{'numeric'},{'size',size(Lon)}));
+addRequired(p,'Var',     @(x) validateattributes(x,{'numeric'},{'size',size(Lon)}));
+addRequired(p,'LonGrid', @(x) validateattributes(x,{'numeric'},{'>=',-180,'<=',360,'vector'}));
+addRequired(p,'LatGrid', @(x) validateattributes(x,{'numeric'},{'>=', -90,'<=', 90,'vector'}));
+addRequired(p,'Alt',     @(x) validateattributes(x,{'numeric'},{'nonnegative','size',size(Lon)}));
+addRequired(p,'AltGrid', @(x) validateattributes(x,{'numeric'},{'nonnegative','vector'}));
 parse(p,NPWs,MinPC,Lon,Lat,Var,LonGrid,LatGrid,Alt,AltGrid);
 clear p
+
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
