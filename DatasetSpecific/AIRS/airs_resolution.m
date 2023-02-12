@@ -21,8 +21,11 @@ function [R,Z] = airs_resolution(Night,DoY,Lat,ZScale)
 %
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-
+%load data
 load([LocalDataDir,'/AIRS/airs3d_resolution.mat'])
+
+%stick NaNs where the resoution is poorly-defined
+Profiles(Profiles == 0) = NaN;
 
 %get resolution profile
 [~,idx1] = min(abs(DoY-DayOfYear));
@@ -32,7 +35,7 @@ idx3  = Night+1; %first element is day, second is night
 Contribs = squeeze(RetrievalMix(idx1,idx2,idx3,:));
 
 Profile = Profiles(:,1)*Contribs(1);
-for iProf=2:1:8; Profile = Profile +  Profiles(:,iProf)*Contribs(iProf); end
+for iProf=2:1:8; Profile = sum([Profile,Profiles(:,iProf)*Contribs(iProf)],2,'omitnan'); end
 Profile = Profile./sum(Contribs);
 
 %interpolate to chosen scale
