@@ -24,8 +24,8 @@ function [R,Z] = airs_resolution(Night,DoY,Lat,ZScale)
 %load data
 load([LocalDataDir,'/AIRS/airs3d_resolution.mat'])
 
-%stick NaNs where the resoution is poorly-defined
-Profiles(Profiles == 0) = NaN;
+%stick Infs where the resoution is poorly-defined
+Profiles(Profiles == 0) = Inf;
 
 %get resolution profile
 [~,idx1] = min(abs(DoY-DayOfYear));
