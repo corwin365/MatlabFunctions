@@ -1,10 +1,13 @@
-function [c] = quadadd(a,b)
-%Pythagorian addition of the two terms
+function [c] = quadadd(varargin)
+%Pythagorian addition of terms
 
-% % c = sqrt(a.^2 + b.^2);
+Sigma = 0;
+for iArg=1:1:numel(varargin)
+  Sigma = Sigma + varargin{iArg}.^2;
+end
+c = sqrt(Sigma);
 
-%turns out there is a built in function that does this with some sanity checking. use this instead!
-c = hypot(a,b);
+
 return
 end
 

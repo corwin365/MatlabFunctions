@@ -373,18 +373,18 @@ end
 %% regularise the data in the horizontal
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-try
+% try
   %flip the temp array around into the order XT x AT x z
   Airs.ret_temp = permute(Airs.ret_temp,[2,3,1]);
   
   %regularise and find spacing
   [Airs,Spacing] = regularise_airs(Airs,[Input.NXT,Input.NAT],Input.Interpolant,Input.Extrapolant);
 
-catch
+% catch
   Error = 1;
   ErrorInfo = 'Problem regularising data';
   return
-end
+% end
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% interpolate the data to a regular vertical grid?

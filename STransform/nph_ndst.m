@@ -167,7 +167,6 @@ default_point_spacing = ones(1,type);
 
 % Default scaling parameter C:
 default_c = 0.25 * ones(1,type);
-
 scales = varargin{1};
 point_spacing = varargin{2};
 c = varargin{3};
