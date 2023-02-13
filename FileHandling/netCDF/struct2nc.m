@@ -29,7 +29,7 @@ function Error = struct2nc(FileName,Data,Dimensions,varargin)
 %required inputs:
 %    [char] FileName - name of the file to write to
 %  [struct] Data - struct containing thre requested data
-%    [cell] Dimensions - list of dimensions we want to declare. 
+%    [cell] Dimensions - list of dimensions we want to declare
 % 
 % "Dimension" must EXIST as an input, but can be the empty cell (i.e. "{}"). 
 % Any unspecified dimensions will be automatically named and generated.
@@ -68,7 +68,7 @@ function Error = struct2nc(FileName,Data,Dimensions,varargin)
 Error = 1;
 
 %what variables types can this function save?
-ValidList = {'int8','char','int16','int32','single','double'};
+ValidList = {'char','string','logical','int8','int16','int32','single','double','logical'};
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -146,7 +146,7 @@ for iVar=1:1:numel(VarList)
 
   %check the type
   Type = class(Data.(VarList{iVar}));
-
+  
   %reject if not acceptable
   if ~sum(any(strcmp(Type,ValidList)))
     disp(['--> Variable ''',VarList{iVar},''' is not of a valid type and will not be saved. Valid Types are:'])
@@ -156,14 +156,18 @@ for iVar=1:1:numel(VarList)
   end
 
   %if complex, split into a real and imag var
-  if ~isreal(Data.(VarList{iVar}));
+  if ~isreal(Data.(VarList{iVar})) & ~isstring(Data.(VarList{iVar}));
     Data.([VarList{iVar},'_real']) = real(Data.(VarList{iVar}));
     Data.([VarList{iVar},'_imag']) = imag(Data.(VarList{iVar}));
     Data = rmfield(Data,VarList{iVar});
     disp(['--> Complex variable ''',VarList{iVar},''' has been split into real and imaginary parts for storage'])
   end
 
+  %if logical, convert to single
+  if strcmp(Type,'logical'); Data.(VarList{iVar}) = single(Data.(VarList{iVar})); end;
+
 end; clear iVar VarList ValidList iType Type
+
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% specify dimensions
@@ -214,14 +218,18 @@ for iDim=1:1:numel(Dimensions)
 end; clear iDim cf
 
 %find the size of all the variables
-VarSizes = [];
+VarSizes = NaN(numel(VarList),9999); %this will not work if some of the variables have 10000 or more dimensions. This is unlikely.
 for iVar=1:1:numel(VarList)
   sz = size(Data.(VarList{iVar}));
-  VarSizes(end+1,:) = sz;
+  try;  VarSizes(iVar,1:numel(sz)) = sz;
+  catch; disp('Routine cannot handle arrays with >9999 dimensions. Stopping.');stop
+  end
 end; clear iVar sz
+VarSizes = VarSizes(:,1:max(sum(~isnan(VarSizes),2)));
 
 %for any that we don't have, create an indexing array
-DimLengths = unique([DimL';unique(VarSizes(:))],'stable');
+DimLengths = unique([DimL';unique(VarSizes(:))],'stable'); 
+DimLengths = DimLengths(~isnan(DimLengths));
 for iDL=numel(DimL)+1:1:numel(DimLengths)
 
   if ~any(DimL == DimLengths(iDL))
@@ -257,11 +265,15 @@ for iVar=1:1:numel(VarList)
   sz = size(Var);
   Class = class(Var);
 
-  %get specified properties, if they exist
+  %define some default parameters, to be overwritten if needed
   FullName = '';
   Units = '';
-  Fill = -9999;
+  if any(strcmp(Class,{'single','double'})); Fill = -9999; 
+  elseif isnumeric(Var);                     Fill = 0;
+  else                                       Fill = '';
+  end
 
+  %get specified properties, if they exist
   if isfield(Inputs,'VarProperties');
     if isfield(Inputs.VarProperties,Name)
       if isfield(Inputs.VarProperties.(Name),'FullName'); FullName = Inputs.VarProperties.(Name).FullName; end
@@ -276,7 +288,6 @@ for iVar=1:1:numel(VarList)
   for iAxis=1:1:numel(sz)
     Axes(iAxis) = find(DimLengths == sz(iAxis));
   end
-  Axes([2,1]) = Axes([1,2]); %row-major vs column-major difference between Matlab and netCDF
 
   %hence, create the data entry
   OutData = cjw_nc_prepop_data(OutData,Name,Class);
@@ -305,11 +316,15 @@ cjw_nc_create(FileName,MetaData,1);
 cjw_nc_makedims(FileName,DimData);
 
 %write the data
-cjw_nc_writedata(FileName,OutData);
+Success = cjw_nc_writedata(FileName,OutData);
+if Success == 1; disp(['--> Data saved as ',FileName]); Error = 0;
+else             disp(['--> Error writing file ',FileName,'; data not saved']); Error = 0;
+end
+
 
 %done!
 Error = 0;
-disp(['--> Data saved as ',FileName])
+
 
 
 end

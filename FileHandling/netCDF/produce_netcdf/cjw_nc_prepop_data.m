@@ -31,7 +31,8 @@ Data.(VarName).Type    = 'double'; %default to double type
 if nargin ==3;
   switch Class
     case 'int8';   Data.(VarName).Type = 'NC_BYTE';
-    case 'char';   Data.(VarName).Type = 'NC_CHAR';  
+    case 'char';   Data.(VarName).Type = 'NC_CHAR'; 
+    case 'string'; Data.(VarName).Type = 'NC_STRING';  
     case 'int16';  Data.(VarName).Type = 'NC_SHORT';  
     case 'int32';  Data.(VarName).Type = 'NC_INT';       
     case 'single'; Data.(VarName).Type = 'NC_FLOAT';

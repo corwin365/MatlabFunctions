@@ -34,70 +34,76 @@ function Success = cjw_nc_writedata(NcFile,Data)
 % % Data.Temperature.Type     = 'double';
 
 
-%open the netCDF file
-FileId = netcdf.open(NcFile,'WRITE');
+try; %if something goes wrong and we don't have the close at the end, then it locks the file
 
 
-%loop over variables
-Variables = fieldnames(Data);
-for iVar=1:1:numel(Variables)
-  
-  
-  %first, make sure there are no invalid characters in the name, by just dropping illegal characters
-  %if this causes duplication, tough.
-  VarName = matlab.lang.makeValidName(Data.(Variables{iVar}).VarName);
-  
-  
-  %create the variable
-  VarId = netcdf.defVar(FileId,                         ...
-                        Data.(Variables{iVar}).VarName, ...
-                        Data.(Variables{iVar}).Type,    ...
-                        Data.(Variables{iVar}).Dims-1); %the -1 is important, as netCDF is zero-indexed and Matlab is 1-indexed
-                      
-  %fill in the attributes
-  netcdf.putAtt(FileId,VarId,'name',     Data.(Variables{iVar}).VarName);
-  netcdf.putAtt(FileId,VarId,'long_name',Data.(Variables{iVar}).FullName);  
-  netcdf.putAtt(FileId,VarId,'units',    Data.(Variables{iVar}).Units);      
-  
+  %open the netCDF file
+  FileId = netcdf.open(NcFile,'WRITE');
 
-  %write data - different depending on if it's numeric or string
-  if strcmp(Data.(Variables{iVar}).Type,'string') ==1 
 
-    %string
-    %%%%%%%%%%%%%%%%%%%%%%%    
+  %loop over variables
+  Variables = fieldnames(Data);
+  for iVar=1:1:numel(Variables)
 
-    netcdf.putVar(FileId,VarId,string(Data.(Variables{iVar}).Data))
 
-  elseif strcmp(Data.(Variables{iVar}).Type,'char') ==1;
+    %first, make sure there are no invalid characters in the name, by just dropping illegal characters
+    %if this causes duplication, tough.
+    VarName = matlab.lang.makeValidName(Data.(Variables{iVar}).VarName);
 
-    %char
-    %%%%%%%%%%%%%%%%%%%%%%%  
 
-    netcdf.putVar(FileId,VarId,char(Data.(Variables{iVar}).Data))    
-    
-  else
+    %create the variable
+    VarId = netcdf.defVar(FileId,                         ...
+      Data.(Variables{iVar}).VarName, ...
+      Data.(Variables{iVar}).Type,    ...
+      Data.(Variables{iVar}).Dims-1); %the -1 is important, as netCDF is zero-indexed and Matlab is 1-indexed
 
-    %numeric
-    %%%%%%%%%%%%%%%%%%%%%%%
+    %fill in the attributes
+    netcdf.putAtt(FileId,VarId,'name',     Data.(Variables{iVar}).VarName);
+    netcdf.putAtt(FileId,VarId,'long_name',Data.(Variables{iVar}).FullName);
+    netcdf.putAtt(FileId,VarId,'units',    Data.(Variables{iVar}).Units);
 
-    %specify fill value
-    netcdf.defVarFill(FileId,VarId,false,Data.(Variables{iVar}).Fill);
 
-    %now, replace any bad values in the data with the fill value...
-    v = Data.(Variables{iVar}).Data;
-    v(isnan(v)) = Data.(Variables{iVar}).Fill;
-      
-    %and write it
-    netcdf.putVar(FileId,VarId,v); 
+    %write data - different depending on if it's numeric or string
+    if strcmp(Data.(Variables{iVar}).Type,'NC_STRING') ==1
+
+      %string
+      %%%%%%%%%%%%%%%%%%%%%%%
+
+      netcdf.putVar(FileId,VarId,string(Data.(Variables{iVar}).Data))
+
+    elseif strcmp(Data.(Variables{iVar}).Type,'NC_CHAR') ==1;
+
+      %char
+      %%%%%%%%%%%%%%%%%%%%%%%
+
+      netcdf.putVar(FileId,VarId,char(Data.(Variables{iVar}).Data))
+
+    else
+
+      %numeric
+      %%%%%%%%%%%%%%%%%%%%%%%
+
+      %specify fill value
+      netcdf.defVarFill(FileId,VarId,false,Data.(Variables{iVar}).Fill);
+
+      %now, replace any bad values in the data with the fill value...
+      v = Data.(Variables{iVar}).Data;
+      v(isnan(v)) = Data.(Variables{iVar}).Fill;
+
+      %and write it
+      netcdf.putVar(FileId,VarId,v);
+
+    end
+
+
+
+    %done!
 
   end
 
-
-  
-  %done!
-  
+  Success = 1;
+catch; Success = 0;
 end
-
 
 %and close the netCDF file
 netcdf.close(FileId);
