@@ -227,6 +227,13 @@ for iVar=1:1:numel(VarList)
 end; clear iVar sz
 VarSizes = VarSizes(:,1:max(sum(~isnan(VarSizes),2)));
 
+%for any 1D variables, flip them round
+if size(VarSizes,2) == 2;   OneD = find(VarSizes(:,1) ==1)
+elseif size(VarSizes,2) >2; OneD = find(VarSizes(:,1) ==1 & isnan(VarSizes(:,3)));
+end
+VarSizes(OneD,[1,2]) = VarSizes(OneD,[2,1]); VarSizes(OneD,2) = NaN;
+
+
 %for any that we don't have, create an indexing array
 DimLengths = unique([DimL';unique(VarSizes(:))],'stable'); 
 DimLengths = DimLengths(~isnan(DimLengths));
@@ -282,6 +289,9 @@ for iVar=1:1:numel(VarList)
       if isfield(Inputs.VarProperties.(Name),    'Name'); Name     = Inputs.VarProperties.(Name).Name;     end         
     end
   end
+
+  %if the array is 1D, drop the empty dimension
+  if any(OneD == iVar); sz = sz(2);  end
 
   %using the size, identify the axes
   Axes = sz.*NaN;
