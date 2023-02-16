@@ -46,22 +46,22 @@ for iDim=1:1:size(Dimensions,2)
                                   Dimensions(iDim).Name, ... %use the true name here, not the matlab-safe one
                                   numel(Dimensions(iDim).Axis));
                                 
-  %create the variable
-  VarId = netcdf.defVar(FileId,                ...
-                        Dimensions(iDim).Name, ...
-                        Dimensions(iDim).Type, ...
-                        DimIDs.(VarName));
-                                
-  %fill in the metadata                    
-  netcdf.putAtt(FileId,VarId,'standard_name',Dimensions(iDim).Name);
-  netcdf.putAtt(FileId,VarId,'long_name',    Dimensions(iDim).FullName);
-  netcdf.putAtt(FileId,VarId,'units',        Dimensions(iDim).Units);
-  
-  %define the fill value
-  netcdf.defVarFill(FileId,VarId,false,Dimensions(iDim).Fill);
-  
-  %and fill in the axis values
-  netcdf.putVar(FileId,VarId,Dimensions(iDim).Axis);
+% % %   %create the variable
+% % %   VarId = netcdf.defVar(FileId,                ...
+% % %                         Dimensions(iDim).Name, ...
+% % %                         Dimensions(iDim).Type, ...
+% % %                         DimIDs.(VarName));
+% % %                                 
+% % %   %fill in the metadata                    
+% % %   netcdf.putAtt(FileId,VarId,'standard_name',Dimensions(iDim).Name);
+% % %   netcdf.putAtt(FileId,VarId,'long_name',    Dimensions(iDim).FullName);
+% % %   netcdf.putAtt(FileId,VarId,'units',        Dimensions(iDim).Units);
+% % %   
+% % %   %define the fill value
+% % %   netcdf.defVarFill(FileId,VarId,false,Dimensions(iDim).Fill);
+% % %   
+% % %   %and fill in the axis values
+% % %   netcdf.putVar(FileId,VarId,Dimensions(iDim).Axis);
   
 end
 

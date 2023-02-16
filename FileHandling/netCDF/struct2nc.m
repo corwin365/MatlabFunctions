@@ -21,20 +21,22 @@ function Error = struct2nc(FileName,Data,Dimensions,varargin)
 %   valid types
 %
 %3. Complex values can be saved, but will be automatically split into two
-%   variables suffixed as '_imaginary' and '_real'.
+%   variables suffixed as '_imag' and '_real'.
 %
 %
 %*********************************************************************
 %
 %required inputs:
+%
 %    [char] FileName - name of the file to write to
-%  [struct] Data - struct containing thre requested data
+%  [struct] Data - struct containing the data
 %    [cell] Dimensions - list of dimensions we want to declare
 % 
-% "Dimension" must EXIST as an input, but can be the empty cell (i.e. "{}"). 
+% "Dimensions" must EXIST as an input, but can be the empty cell (i.e. "{}"). 
 % Any unspecified dimensions will be automatically named and generated.
 %
 %optional inputs:
+%
 %  metadata:
 %      [char] title      - file title
 %      [char] long_title - file long title
@@ -42,20 +44,18 @@ function Error = struct2nc(FileName,Data,Dimensions,varargin)
 %    [struct] MetaData   - each field should be a string, which will be added to the metadata
 %
 %  dimension handling
-%     [cell] DimUnits     - cell array of strings containing units of each dimension, in same order as Dimensions
-%     [cell] DimNames     - cell array of strings containing names of each dimension, in same order as Dimensions
+%     [cell] DimUnits     - cell array of strings containing units of each specified dimension, in same order as Dimensions
+%     [cell] DimNames     - cell array of strings containing names of each specified dimension, in same order as Dimensions
 %
 %  variable options
 %     [struct] VarProperties - struct of structs, where each member:
 %                              a. is named the same as the variable of interest
 %                              b. contains fields which are strings, with possible names
-%                                 Name - variable name to use. IF THIS IS THE SAME AS ANOTHER VARIABLE, BEHAVIOUR WILL BE UNPREDICTABLE, DO NOT DO THIS.
+%                                 Name - variable name to use. IF THIS IS THE SAME AS ANOTHER VARIABLE, BEHAVIOUR WILL BE UNPREDICTABLE. DO NOT DO THIS.
 %                                 FullName - variable description
 %                                 Units - units
 %                                 Fill - fill value
-%                                 Type - type
 %                              All of these fields are optional
-%     [cell] DimNames     - cell array of strings containing names of each dimension, in same order as Dimensions
 %  
 %
 %Corwin Wright, c.wright@bath.ac.uk, 2023/02/13
@@ -97,11 +97,9 @@ addParameter(p,'long_title',  '',@ischar);
 addParameter(p,'CreatedBy',  '', @ischar);  
 addParameter(p,'MetaData',  struct(), @isstruct);  
 
-
 %dimension handling
 addParameter(p,'DimUnits',  cell(numel(Dimensions),1), @iscell);  
 addParameter(p,'DimNames',  cell(numel(Dimensions),1), @iscell);  
-
 
 %variable properties
 addParameter(p,'VarProperties',struct(), @isstruct);  
@@ -176,7 +174,7 @@ end; clear iVar VarList ValidList iType Type
 %check if we fed any explicit dims to the programme, and handle them if we did
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-if ~ numel(Dimensions) == 0
+if numel(Dimensions) ~= 0;
 
   %create structure for Dimensions
   DimData    = struct();
@@ -218,23 +216,22 @@ for iDim=1:1:numel(Dimensions)
 end; clear iDim cf
 
 %find the size of all the variables
-VarSizes = NaN(numel(VarList),9999); %this will not work if some of the variables have 10000 or more dimensions. This is unlikely.
+VarSizes = NaN(numel(VarList),9999); %this will not work if any of the variables have 10000 or more dimensions. Sorry.
 for iVar=1:1:numel(VarList)
   sz = size(Data.(VarList{iVar}));
   try;  VarSizes(iVar,1:numel(sz)) = sz;
-  catch; disp('Routine cannot handle arrays with >9999 dimensions. Stopping.');stop
+  catch; disp('Routine cannot handle arrays with >9999 dimensions. Stopping.');return;
   end
 end; clear iVar sz
 VarSizes = VarSizes(:,1:max(sum(~isnan(VarSizes),2)));
 
-%for any 1D variables, flip them round
-if size(VarSizes,2) == 2;   OneD = find(VarSizes(:,1) ==1)
-elseif size(VarSizes,2) >2; OneD = find(VarSizes(:,1) ==1 & isnan(VarSizes(:,3)));
-end
-VarSizes(OneD,[1,2]) = VarSizes(OneD,[2,1]); VarSizes(OneD,2) = NaN;
+% % % %for any 1D variables, flip them round to eliminate superfluous empty dimension
+% % % if size(VarSizes,2) == 2;   OneD = find(VarSizes(:,1) ==1)
+% % % elseif size(VarSizes,2) >2; OneD = find(VarSizes(:,1) ==1 & isnan(VarSizes(:,3)));
+% % % end
+% % % VarSizes(OneD,[1,2]) = VarSizes(OneD,[2,1]); VarSizes(OneD,2) = NaN;
 
-
-%for any that we don't have, create an indexing array
+%for any that we don't have yet, create an axis array
 DimLengths = unique([DimL';unique(VarSizes(:))],'stable'); 
 DimLengths = DimLengths(~isnan(DimLengths));
 for iDL=numel(DimL)+1:1:numel(DimLengths)
@@ -261,7 +258,7 @@ clear Dimensions DimL VarSizes
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 
-%now, loop over the variables and stick them in the netCDF file
+%now, loop over the variables and prepare to stick them in the netCDF file
 OutData = struct();
 
 for iVar=1:1:numel(VarList)
@@ -308,8 +305,6 @@ for iVar=1:1:numel(VarList)
   OutData.(Name).Fill     = Fill;
 
   clear Fill Units FillName
-
-
 
 end; clear iVar Var Name sz Class Axes iAxis
 
