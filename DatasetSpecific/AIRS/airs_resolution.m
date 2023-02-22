@@ -1,4 +1,4 @@
-function [R,Z] = airs_resolution(Night,DoY,Lat,ZScale)
+function [R,Z] = airs_resolution(Day,DoY,Lat,ZScale)
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %function to compute a weighted resolution profile
@@ -10,7 +10,7 @@ function [R,Z] = airs_resolution(Night,DoY,Lat,ZScale)
 %     'airs3d_resolution.mat' - file containing the coefficients and baseline profiles
 %
 %in:
-%  Night: 0 for daytime profile, 1 for nighttime
+%  Day: 1 for daytime profile, 0 for nighttime.
 %  DoY: day of year. Can be fractional
 %  Lat: latitude
 %  ZScale: height scale to interpolate results onto, in km
