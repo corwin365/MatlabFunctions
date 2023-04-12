@@ -1,23 +1,10 @@
 
-%wrapper for pres2alt_complex
-function z = p2h(pres)
+%backwards-compatibility wrapper for zp
+function z = p2h(p)
 
+z = zp(p,'z');
 
-  %rearrange data into a line
-  sz = size(pres);
-  pres = pres(:);
-  
-  
-  %process
-  z = pres2alt_complex(pres);
-
-  
-  %and convert back
-  z = reshape(z,sz);
-  
-
-
-end 
+end
 
 
 
