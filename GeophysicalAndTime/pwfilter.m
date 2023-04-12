@@ -84,8 +84,8 @@ clear sz Filled Bad MinPC
 LonAxis = LonGrid(1,:,1);
 
 %create storage arrays
-PWStore = NaN([size(VarGrid),NPWs]); %map of PWs
-VGrid   = zeros(size(VarGrid));      %sum of planetary waves at each point
+PWStore = NaN([size(VarGrid),NPWs+1]); %map of PWs
+VGrid   = zeros(size(VarGrid));        %sum of planetary waves at each point
 
 %compute planetary wave value at each data point
 for iPW=1:1:NPWs+1
@@ -107,8 +107,9 @@ clear VarGrid LonAxis
 %reshape back to original grid shape
 sz = size(LatGrid); if numel(sz) < 3; sz = [sz,1,1]; end
 VGrid   = permute(reshape(  VGrid,sz([2,1,3])),[2,1,3]);
-PWStore = permute(reshape(PWStore,[sz([2,1,3]),4]),[2,1,3,4]);
+PWStore = permute(reshape(PWStore,[sz([2,1,3]),NPWs+1]),[2,1,3,4]);
 clear sz
+
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% remove from raw profiles

@@ -21,7 +21,7 @@ sz = size(y);
 DimOrder = unique([Dim,1:1:numel(sz)],'stable');
 
 %reshape to make all other dimensions lines
-y = reshape(y,[sz(Dim),prod(sz(DimOrder(2:end)))]);
+y = reshape(permute(y,DimOrder),[sz(Dim),prod(sz(DimOrder(2:end)))]);
 
 %interpolate
 yi = interp1(x,y,xi,varargin{:});

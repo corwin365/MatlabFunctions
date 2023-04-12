@@ -3,7 +3,7 @@ function TropopausePressure = find_tropopause(TimeGrid,LonGrid,LatGrid,Verbose)
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%
-%%find stratopause in ERA5 data, using WMO definition
+%%find tropopause in ERA5 data, using WMO definition
 %
 %
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%

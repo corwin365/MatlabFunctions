@@ -24,13 +24,13 @@ function [R,Z] = airs_resolution(Day,DoY,Lat,ZScale)
 %load data
 load([LocalDataDir,'/AIRS/airs3d_resolution.mat'])
 
-%stick Infs where the resoution is poorly-defined
-Profiles(Profiles == 0) = Inf;
+%stick very large values where the resoution is poorly-defined
+Profiles(Profiles == 0) = 30;
 
 %get resolution profile
 [~,idx1] = min(abs(DoY-DayOfYear));
 [~,idx2] = min(abs(Lat-Latitude));
-idx3  = Night+1; %first element is day, second is night
+if Day == 1; idx3 = 2; else idx3 = 1; end %1 is nighttime, 2 is daytime
 
 Contribs = squeeze(RetrievalMix(idx1,idx2,idx3,:));
 
