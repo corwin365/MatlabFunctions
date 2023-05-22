@@ -1,8 +1,20 @@
 
-%backwards-compatibility wrapper for zp
-function p = h2p(z)
+%wrapper for alt2pres_complex
 
-p = zp(z,'p');
+function p = h2p(alt)
 
-end
+
+  %rearrange data into a line
+  sz = size(alt);
+  alt = alt(:);
+  
+  p = alt2pres_complex(alt);
+  
+  %and convert back
+  p = reshape(p,sz);
+    
+  
+end % end cycling through all of alt's element(s)...
+
+
 

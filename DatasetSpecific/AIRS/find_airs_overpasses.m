@@ -1,5 +1,6 @@
 function [Results,NotFound] = find_airs_overpasses(TimeRange,LonRange,LatRange,Truncate,Verbose)
 
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %find AIRS passes over a particular grid box in time and space
@@ -16,8 +17,9 @@ warning off %this routine generates a lot of polynomial-duplication warnings tha
 %% settings
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-%time range
-Settings.TimeScale = TimeRange(1):1:TimeRange(2); clear TimeRange
+%time range in days to loop over
+%we'll use the actual times inside the core loop as a further check
+Settings.TimeScale = floor(TimeRange(1)):1:ceil(TimeRange(2));
 
 %lat/lon box
 Settings.LonRange = LonRange; clear LonRange;
@@ -82,6 +84,11 @@ for iDay=1:1:numel(Settings.TimeScale)
       Airs.l1_lat = Airs.l1_lat(1+Settings.Truncate(1):end-Settings.Truncate(1), ...
                                 1+Settings.Truncate(2):end-Settings.Truncate(2));
     end
+
+    %check if we're within the requested time range (check needed for subdaily level)
+    t = minmax(Airs.l1_time);
+    if min(t) > max(TimeRange) || max(t) < min(TimeRange); continue; end
+    clear t
     
     %create a polybox for the AIRS granule area    
     Poly.Airs = polyshape([Airs.l1_lon(1:end,1)', ...

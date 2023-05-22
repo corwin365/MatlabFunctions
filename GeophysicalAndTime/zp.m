@@ -36,6 +36,17 @@ if ~strcmp(Direction,'z') && ~strcmp(Direction,'p');
   return
 end
 
+%there is a problem for arrays with leading singleton dimensions on line 81.
+%To avoid this drop them here and reinstate them at the end of the routine.
+sz = size(Values);
+Singleton = find(sz == 1);
+if numel(Singleton) > 0
+  RealDims  = find(sz ~= 1);
+  Values = squeeze(Values);
+end
+clear sz
+
+
 
 %% set up the assumptions needed
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -64,20 +75,22 @@ if     strcmp(Direction,'z');  Bs = Basis.P;
 elseif strcmp(Direction,'p');  Bs = Basis.Z;
 end
 
+%there is a bug here which is causing a crash in certain circumstances that appear to be related to singleton dimensions
+%FIX THIS!
+
+
 %make the values and basis array the same size and shape
-A = repmat(Values,[ones(ndims(Values),1)',size(Bs)]);
+A = repmat(Values,[ones(ndims(Values),1)',numel(Bs)]);
 B = repmat(Bs',[1,size(Values)]);
 B = permute(B,[2:ndims(A),1]);
 
-%hence find the closest value in the Basis array  BELOW the current level (as we're working in layers)
+%hence find the closest value in the Basis array BELOW the current level (as we're working in layers)
 [~,idx] = min(abs(A-B),[],ndims(A));
-delta = Values-Bs(idx);
+delta = Values-squeeze(Bs(idx)); %PROBLEM IS HERE IN ARRAYS WITH LEADING ONES!
 idx(delta < 0 & idx > 1) = idx(delta < 0 & idx > 1) - 1;
 
 %finally, do the calculation
-if     strcmp(Direction,'z');  Out = (-H(idx) .* ln(Values./Basis.P(idx))) + Basis.Z(idx);
+if     strcmp(Direction,'z');  Out = (-H(idx) .* ln(Values'./Basis.P(idx))) + Basis.Z(idx);
 elseif strcmp(Direction,'p');  Out = Basis.P(idx) .* exp(-(Values - Basis.Z(idx))./H(idx));
 end
 
-
-%done!

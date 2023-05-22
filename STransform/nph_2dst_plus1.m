@@ -42,16 +42,16 @@ end
 dz = point_spacing(3);
 
 % find dominant freqs in 3D:
-[scales3d,scalemag] = nph_finddomfreqs(IN,nfreqs);
+[scales,scalemag] = nph_finddomfreqs(IN,nfreqs);
 
-% flip negative Z scales. Because of the ambiguity, anywhere where the sign
-% of the vertical freq is negative, use the flipped horizontal freqs, ie
-% 5,5,-3 => -5,-5,3. This means that we assume a positive vertical
-% wavenumber in all cases before we even analyse with the 2DST. This can
-% easily be flipped afterwards depending on what assumption we want to
-% make.
-neglocs = scales3d(3,:) < 0;
-scales3d(:,neglocs) = -scales3d(:,neglocs);
+% % % % % flip negative Z scales. Because of the ambiguity, anywhere where the sign
+% % % % % of the vertical freq is negative, use the flipped horizontal freqs, ie
+% % % % % 5,5,-3 => -5,-5,3. This means that we assume a positive vertical
+% % % % % wavenumber in all cases before we even analyse with the 2DST. This can
+% % % % % easily be flipped afterwards depending on what assumption we want to
+% % % % % make.
+% % % % neglocs = scales(3,:) < 0;
+% % % % scales(:,neglocs) = -scales(:,neglocs);
 
 % % combine with the opposing freq directions, to ensure that we get all +ve
 % % and -ve phase shifts:
@@ -59,18 +59,40 @@ scales3d(:,neglocs) = -scales3d(:,neglocs);
 % scalemag = [scalemag  scalemag];
 
 % Find unique combinations of scales:
-[~,ia,~] = unique(scales3d(1:2,:)','rows','stable');
-scales3d = scales3d(:,ia);
+[~,ia,~] = unique(scales(1:2,:)','rows','stable');
+scales = scales(:,ia);
 scalemag = scalemag(ia);
 % the 'stable' is important to keep them sorted by magnitude
 
 % sort them by magnitude again just to make sure:
 [scalemag,ib] = sort(scalemag,'descend');
-scales3d = scales3d(:,ib);
+scales = scales(:,ib);
+nscales = size(scales,2);
 
 
-scales = scales3d(1:2,:);
-nscales = length(scales);
+% PROBLEM: ok, so one problem is that the 2DST below is trimming off maxwavelengths
+% if you ask it to, but then we can't seem to get these to refer back to
+% the original wavelengths selected above, which include the vertical.
+% SOLUTION: trim off the HORIZONTAL wavelengths here and only analyse for
+% the good ones below. Then do the vertical in the loop as per.
+horz_wavelength = abs(repmat((point_spacing(1:2).*size(IN,[1 2]))',1,size(scales,2)) ./ scales(1:2,:));
+if any(strcmpi(varargin,'minwavelengths'))
+    minlh = varargin{find(strcmpi(varargin,'minwavelengths'))+1}(1:2);
+else
+    minlh = [0 0 0];
+end
+if any(strcmpi(varargin,'maxwavelengths'))
+    maxlh = varargin{find(strcmpi(varargin,'maxwavelengths'))+1}(1:2);
+else
+    maxlh = [Inf Inf Inf];
+end
+
+% find if any exceeed:
+goodinds = horz_wavelength(1,:) >= minlh(1) & horz_wavelength(2,:) >= minlh(2);
+goodinds = goodinds & horz_wavelength(1,:) <= maxlh(1) & horz_wavelength(2,:) <= maxlh(2);
+% strip out scales:
+scales = scales(:,goodinds);
+nscales = size(scales,2);
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -81,9 +103,19 @@ nscales = length(scales);
 allST = struct;
 
 for z = 1:size(IN,3)
-    allST(z).ST = nph_ndst_dev(IN(:,:,z),scales,point_spacing(1:2),c(1:2),varargin{:},'full');
+%     allST(z).ST = nph_ndst(IN(:,:,z),scales(1:2,:),point_spacing(1:2),c(1:2),varargin{:},'full');    
+    allST(z).ST = nph_ndst(IN(:,:,z),scales(1:2,:),point_spacing(1:2),c(1:2),'full');
 end
 
+% %%%%%%%%%%%%%
+% % ok so for some reason, the 2DST above sometimes comes out with fewer
+% % scales than the finddomfreqs function above.
+% % use ismember to select the scales that made it:
+% scaleinds   = all(ismember(scales(1:2,:),allST(1).ST.scales),1);
+% scales      = scales(:,scaleinds);
+% scalemag    = scalemag(:,all(scaleinds,1));
+% nscales     = size(scales,2);
+% %%%%%%%%%%%%%
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%% STEP 3: Compute cospectra and phase shifts between levels
@@ -99,8 +131,9 @@ indmap = permute(repmat((1:nscales)',1,size(IN,1),size(IN,2)),[2 3 1]);
 
 % Also need to do one so we can find the co-varying horizontal wavelengths
 % that these phase shifts corresponded to:
-lhmap1 = permute(repmat((scales(1,:))',1,size(IN,1),size(IN,2)),[2 3 1]);
-lhmap2 = permute(repmat((scales(2,:))',1,size(IN,1),size(IN,2)),[2 3 1]);
+lhmap1  = permute(repmat((scales(1,:))',1,size(IN,1),size(IN,2)),[2 3 1]);
+lhmap2  = permute(repmat((scales(2,:))',1,size(IN,1),size(IN,2)),[2 3 1]);
+signmap = permute(repmat((sign(scales(3,:)))',1,size(IN,1),size(IN,2)),[2 3 1]);
 % and convert these to wavelengths:
 fullwid1 = size(IN,1)*point_spacing(1);
 fullwid2 = size(IN,2)*point_spacing(2);
@@ -125,22 +158,25 @@ zfwhm = dz ./ c(3);
 zstd = zfwhm ./ 2.355;
 % zstd = 9; % km
 
-% how many levels either side do we want to consider for Gaussian weighting?
-% We can adjust this, it isn't the weighting but number of levels to be
-% considered. I found 5 height levels either side was ok, but if you want
-% you can just do 2 standard deviations:
-levelseitherside = round(1*zstd); % or 1 std? keep it simple?
-rng = (levelseitherside*2)+1;
 
-%compute weightings here for the weighted average over these heights
-% % % % wvec = exp(- ((1:levelseitherside)*dz ./ (sqrt(2)*zstd) ).^2);
-% % % % wvec = [wvec(end:-1:1) wvec];
-% since we now do phase shift over 2*dz levels, we don't need an even
-% lengthed weighting vector:
-wvec = exp(- ((-levelseitherside:levelseitherside)*dz ./ (sqrt(2)*zstd) ).^2);
+% note that the below has been replaced by setting a threshold value for
+% the weighting in the loop below of around 0.25.
+% % % % % how many levels either side do we want to consider for Gaussian weighting?
+% % % % % We can adjust this, it isn't the weighting but number of levels to be
+% % % % % considered. I found 5 height levels either side was ok, but if you want
+% % % % % you can just do 2 standard deviations:
+% % % % levelseitherside = round(1*zstd); % or 1 std? keep it simple?
+% % % % rng = (levelseitherside*2)+1;
 
-% esnure the weightings all add up to 1:
-wvec = wvec ./ (sum(wvec(:)));
+% % % % %compute weightings here for the weighted average over these heights
+% % % % % % % % wvec = exp(- ((1:levelseitherside)*dz ./ (sqrt(2)*zstd) ).^2);
+% % % % % % % % wvec = [wvec(end:-1:1) wvec];
+% % % % % since we now do phase shift over 2*dz levels, we don't need an even
+% % % % % lengthed weighting vector:
+% % % % wvec = exp(- ((-levelseitherside:levelseitherside)*dz ./ (sqrt(2)*zstd) ).^2);
+% % % % 
+% % % % % esnure the weightings all add up to 1:
+% % % % wvec = wvec ./ (sum(wvec(:)));
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Outside of the main loop, go through and compute cospectra for all
@@ -176,6 +212,18 @@ end
 % % %     allC(i).C = smoothn(allC(i).C,[3 3 1]);
 % % end
 
+% 
+% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% %%%% APPLY MIN/MAX WAVELENGTH CONDITIONS
+% % anywhere where the phase shift would give a LZ < MIN or LZ > MAX, set
+% % these coefficients to zero so they don't get picked up?
+% if any(strcmpi(varargin,'minwavelengths'))
+%     minlz = varargin{find(strcmpi(varargin,'minwavelengths'))+1}(3);
+% end
+% if any(strcmpi(varargin,'maxwavelengths'))
+%     maxlz = varargin{find(strcmpi(varargin,'maxwavelengths'))+1}(3);
+% end
+
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -185,17 +233,35 @@ Ph = nan(size(IN));
 % for each height
 for z = 1:size(IN,3)
     
-    % first, find the range of levels we're going to be phase shifting
-    % across:
-    zrng = z + (-levelseitherside:levelseitherside);
+%     % first, find the range of levels we're going to be phase shifting
+%     % across:
+%     zrng = z + (-levelseitherside:levelseitherside);
+%     
+%     % fix issues at the top and bottom:
+%     if min(zrng) < 1
+%         zrng = 1:max(zrng);
+%     end
+%     if max(zrng) > size(IN,3)
+%         zrng = min(zrng):size(IN,3);
+%     end
+
+    % use the weighting threshold to lock down which indices we use
+    % instead setting a range either side:
+    zrng = 1:size(IN,3);
     
-    % fix issues at the top and bottom:
-    if min(zrng) < 1
-        zrng = 1:max(zrng);
-    end
-    if max(zrng) > size(IN,3)
-        zrng = min(zrng):size(IN,3);
-    end
+    %%%% Compute the weightings in-house. It won't be that much slower,
+    %%%% don't worry.
+    wvec = exp(- (((zrng - z)*dz) ./ (sqrt(2)*zstd) ).^2);
+    
+    %%%% To speed things up, let's only take weighted averages of heights
+    %%%% where the weighting is larger than a threshold value:
+    wlim = 0.2;
+    zrng = zrng(wvec > wlim);
+    wvec = wvec(wvec > wlim);
+    
+    %%%% ensure the weightings all add up to 1:
+    %%%% (DO THIS *AFTER* THE THRESHOLD VALUE)
+    wvec = wvec ./ (sum(wvec(:)));
     
     % Take the average (this is reasonable while they are split into
     % real and imaginary components - think of a vector on the argand diagram,
@@ -213,10 +279,9 @@ for z = 1:size(IN,3)
         
         % combine using weighted average into our group for this selected
         % level z:
-        Chere = (wvec(i) .* Chere);
-        Cavg = Cavg + Chere;
-        %         Cavg = Cavg + (wvec(i) .* Chere);
+        Cavg = Cavg + (wvec(i) .* Chere);
         % because the weights all add up to 1, this should work
+        
     end
     
     % compute phase shift of this average cospectrum
@@ -246,26 +311,21 @@ for z = 1:size(IN,3)
 % % % %     %%%% can't. Perhaps this is related to the ambiguity thing?
 % % % %     neglocs = phasediff < 0;
 % % % %     phasediff(neglocs) = (2*pi) + phasediff(neglocs);
+
     
-    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    %%%% APPLY MIN/MAX WAVELENGTH CONDITIONS
-    % anywhere where the phase shift would give a LZ < MIN or LZ > MAX, set
-    % these coefficients to zero so they don't get picked up?
-    if any(strcmpi(varargin,'minwavelengths'))
-        minlz = varargin{find(strcmpi(varargin,'minwavelengths'))+1}(3);
-    end
-    if any(strcmpi(varargin,'maxwavelengths'))
-        maxlz = varargin{find(strcmpi(varargin,'maxwavelengths'))+1}(3);
-    end
+% % % % %     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% % % % %     %%%% APPLY ONLY THE MAGNITUDE OF PHASE SHIFT:
+% % % % %     kz = abs(phasediff) ./ (2 * dz);
+% % % % %     lz = (2*pi) ./ kz;
+% % % % %     % you could take the sign from the dominant scales above, if you want,
+% % % % %     % but tbh it's probably not worth it since we're forcing +ve F3.
+% % % % %     
+% % % % %     badlocs = abs(lz) < minlz | abs(lz) > maxlz;
+% % % % %     Cavg(badlocs) = 0;
+% % % % % 
+% % % % %     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     
-    % apply:
-    kz = phasediff ./ (2 * dz);
-    lz = (2*pi) ./ kz;
-    
-    goodlocs = abs(lz) > minlz | abs(lz) < maxlz;
-    Cavg(~goodlocs) = 0;
-    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    
+
     % now find the locations of the maximum covarying amplitudes:
     [~,inds] = max(abs(Cavg),[],3);
     
@@ -286,14 +346,14 @@ for z = 1:size(IN,3)
     kz = phasediff ./ (2 * dz);
     lz = (2*pi) ./ kz;
     
-    % Finally, if there were literally no freqs that could be selected that
-    % were within the min/max freqs, set them to the Nyquist min/max possible:
-    if any(strcmpi(varargin,'minwavelengths'))
-        lz(abs(lz) < minlz) = 2 * dz;
-    end
-    if any(strcmpi(varargin,'maxwavelengths'))
-        lz(abs(lz) > maxlz) = dz * sz(3);
-    end
+% % % % %     % Finally, if there were literally no freqs that could be selected that
+% % % % %     % were within the min/max freqs, set them to the Nyquist min/max possible:
+% % % % %     if any(strcmpi(varargin,'minwavelengths'))
+% % % % %         lz(abs(lz) < minlz) = 2 * dz;
+% % % % %     end
+% % % % %     if any(strcmpi(varargin,'maxwavelengths'))
+% % % % %         lz(abs(lz) > maxlz) = dz * sz(3);
+% % % % %     end
     
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     %%%% SELECT ONLY POSITIVE PHASE SHIFTS / WAVELENGTHS
@@ -305,11 +365,14 @@ for z = 1:size(IN,3)
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     
     % and subscribe!
-    F.F3(:,:,z) = 1./lz;
+    %%%% apply the sign of the original scales:
+    signs = signmap; signs(~locs) = NaN; signs = nansum(signs,3);
+    F.F3(:,:,z) = (1./lz) .* signs;
     
     % also find the corresponding LH for these locations:
     lh1 = lhmap1; lh1(~locs) = 0; lh1 = sum(lh1,3);
     lh2 = lhmap2; lh2(~locs) = 0; lh2 = sum(lh2,3);
+    
     F.F1(:,:,z) = 1./lh1;
     F.F2(:,:,z) = 1./lh2;
     
@@ -318,7 +381,7 @@ end
 
 % assemble some other stuff:
 freqs = repmat(sz(1:2)',1,size(scales,2)) .* repmat(point_spacing(1:2)',1,size(scales,2));
-freqs = freqs ./ scales;
+freqs = freqs(1:2,:) ./ scales(1:2,:);
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%% STEP 4: Finally, assemble your outputs
@@ -376,6 +439,212 @@ end
 
 
 OUT = ST;
+
+
+
+
+
+end
+
+
+
+
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%% NESTED FUNCTIONS
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+function varargout = nph_finddomfreqs(IN,nfreqs)
+
+% This function returns the N largest spectral amplitude scale combinations
+% of the FFT of the input data.
+
+% It tells you what the dominant freqs (or at least, their positions in
+% fourier space) of the input data were.
+
+% Supports 1D,2D,3D,4D inputs.
+
+% Inputs = IN (input data), nfreqs (number of largest scales)
+% Outputs: scales (a list of scale combinations corresponding to dominant freqs)
+
+% Usage: scales = nph_finddomfreqs(IN,nfreqs)
+
+%%%% ====================
+% alright here's where we use the FFT to find the top XXXX frequencies
+% present in the input data, then work out what their scales would be.
+% Hold my beer...
+
+% IN = Airs.Tp(:,1:134,16);
+% nfreqs = 10;
+% select N-D type:
+
+sz = size(IN);
+type = sum(sz ~= 1);
+
+% take FFT:
+F = fftn(IN);
+
+ab = abs(F(:));
+im = imag(F(:));
+
+% sort by absolute spectral power
+[ab,ib] = sort(ab,'descend');
+
+% also rearrange the imaginary comps by this sorting:
+im = im(ib);
+
+% exclude the DC components with imag parts == 0
+ab = ab(im ~= 0);
+ib = ib(im ~= 0);
+
+% now reshape:
+% this should always work - after the zeros are taken out there should
+% always be an even number of complex conjugate pairs remaining.
+% note: you need the transpose ' here due to the way reshape re-lists things.
+abr = reshape(ab',2,length(ab)/2);
+ibr = reshape(ib',2,length(ib)/2);
+
+% Make a coord system in fft space
+v = struct;
+for n = 1:type
+    switch mod(sz(n),2)
+        case 0 % if it's even
+            N = (sz(n)/2)-1;
+            v(n).vec = ifftshift([0 -N:N]);
+        case 1 % if it's odd
+            N = (sz(n)-1)/2;
+            v(n).vec = ifftshift(-N:N);
+    end
+end
+
+% what were the scales that related to these locations?
+ii = struct;
+switch type
+    case 1
+        ii(1).i = ind2sub(size(F),ibr(1,:));
+    case 2
+        [ii(1).i,ii(2).i] = ind2sub(size(F),ibr(1,:));
+    case 3
+        [ii(1).i,ii(2).i,ii(3).i] = ind2sub(size(F),ibr(1,:));
+    case 4
+        [ii(1).i,ii(2).i,ii(3).i,ii(4).i] = ind2sub(size(F),ibr(1,:));
+end
+
+% RESET SCALES:
+scales      = cell(1,type);
+scalemag    = cell(1,type);
+% wavelengths = cell(1,type);
+% physical_dims = nan(1,type);
+goodinds = ones(1,length(ii(1).i));
+
+% LIMIT TO MIN/MAX SCALES, NON-ZERO SCALES:
+for n = 1:type
+    
+    scales{n} = v(n).vec(ii(n).i);
+    scalemag{n} = abr(1,:);
+    
+    % remove zero scales:
+    goodinds = all(cat(1,goodinds,scales{n} ~= 0));
+    
+%     % covert to wavelengths if needed:
+%     physical_dims(n) = point_spacing(n) * sz(n);
+%     wavelengths{n} = physical_dims(n) ./ scales{n};
+%     
+%     % apply MIN wavelength cutoff:
+%     if minwavelengthsflag
+%         goodinds = all(cat(1,goodinds,abs(wavelengths{n}) >= abs(minwavelengths(n))));
+%     end
+%     
+%     % apply MAX wavelength cutoff:
+%     if maxwavelengthsflag
+%         goodinds = all(cat(1,goodinds,abs(wavelengths{n}) <= abs(maxwavelengths(n))));
+%     end
+    
+end
+
+% Apply this externally to the above loop so that it's the same for all
+% dimensions:
+for n = 1:type
+    scales{n} = scales{n}(goodinds);
+    scalemag{n} = scalemag{n}(goodinds);
+%     wavelengths{n} = wavelengths{n}(goodinds);
+end
+
+% if the user has asked for more freqs than there are available, limit it:
+for n = 1:type
+    if nfreqs > length(scales{n})
+        warning(['Too many frequencies requested. Limiting to ' num2str(length(scales{n})) '.'])
+        nfreqs = length(scales{n});
+    end
+end
+
+% Finally, select the top NFREQS from our formatted scales:
+for n = 1:type
+    scales{n} = scales{n}(1:nfreqs);
+    scalemag{n} = scalemag{n}(1:nfreqs);
+%     wavelengths{n} = wavelengths{n}(1:nfreqs);
+end
+
+% % % % % % Try this: for the collapsed spectrum we care about the order
+% % % % % % (slightly) that the frequencies are called. So let's sort them in
+% % % % % % order of lowest to highest scales. Not sure if it'll make a
+% % % % % % difference but lets's see.
+% % % % % scalemag = reshape([scales{1:type}],type,nfreqs);
+% % % % % scalemag = sqrt(sum(scalemag.^2,1));
+% % % % % [~,ord] = sort(scalemag,'ascend');
+% % % % % 
+% % % % % for n = 1:type
+% % % % %     scales{n} = scales{n}(ord);
+% % % % % %     wavelengths{n} = wavelengths{n}(ord);
+% % % % % end
+
+% Convert to vectors:
+scales_vec      = zeros(type,nfreqs);
+scalemag_vec    = zeros(type,nfreqs);
+% wavelengths_vec = zeros(type,length(ord));
+for n = 1:type
+    scales_vec(n,:) = scales{n};
+    scalemag_vec(n,:) = scalemag{n};
+%     wavelengths_vec(n,:) = wavelengths{n};
+end
+scales = scales_vec;
+scalemag = scalemag_vec(1,:);
+% wavelengths = wavelengths_vec;
+
+switch nargout
+    case {1,0}
+        varargout{1} = scales;
+    case 2
+        varargout{1} = scales;
+        varargout{2} = scalemag;
+end
+
+
+end
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
