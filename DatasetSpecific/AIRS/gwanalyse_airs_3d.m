@@ -7,6 +7,7 @@ function [ST,Airs,Error,ErrorInfo] = gwanalyse_airs_3d(Airs,varargin)
 %
 %Corwin Wright, c.wright@bath.ac.uk, 10/AUG/2019
 %extensively modified 07/JUL/2020 to add "2D+1" option, using phase differences to compute Lz
+%modified 02/JUN/2023 to add Peter Berthelemy's WaveMask generator
 %
 %IMPORTANT: this routine does not allow most of the optional flags of
 %nph_ndst (e.g. Scales, Full Mode) - only the NUMBER of scales and c can be
@@ -24,6 +25,7 @@ function [ST,Airs,Error,ErrorInfo] = gwanalyse_airs_3d(Airs,varargin)
 %
 %INCLUDES the following functions written by others:
 % Neil Hindley: nph_haversine,scale_height (n.hindley@bath.ac.uk)
+% Peter Berthelemy: bettermask (pb948@bath.ac.uk)
 %
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -36,7 +38,7 @@ function [ST,Airs,Error,ErrorInfo] = gwanalyse_airs_3d(Airs,varargin)
 %%%%%%%%%%%
 %
 %  ST:  STed AIRS data, provided no critical errors hit. Empty struct otherwise.
-%  Airs: input AIRS data with small modifcations (e.g. same height range as ST output)
+%  Airs: input AIRS data with small modifications (e.g. same height range as ST output)
 %
 %  Error: error state; 0: no error; 1: critical error; 2: minor error
 %  ErrorInfo: critical error details 
@@ -68,7 +70,17 @@ function [ST,Airs,Error,ErrorInfo] = gwanalyse_airs_3d(Airs,varargin)
 %    NotAirsData     (logical,          false)  overrides some of the sanity checks on AIRS data formatting
 %    TwoDPlusOne     (logical,          false)  *ADDITIONALLY* compute vertical wavelengths with 2D+1 method
 %
-%
+%    WaveMask        (logical,           true)  compute a binary mask (1 = wave present, 0 = no wave) using Peter Berthelemy's method (paper in prep). 
+%     This has the following tunable parameters:
+%       WMVars       (cell,         {'k','l'})  variables used to compute WaveMask (all vars used in 2D planes only)
+%       WMDerivs     (numeric,          [1,2])  orders of derivatives used in WaveMask on first pass
+%       WMsumCutoff  (numeric,          0.375)  cutoff derivative-sum for WaveMask on first pass, per variable and derivative-order used.
+%       WMsizeCutoff (numeric,            150)  number of points needed in each connected region for WaveMask in second pass
+%       WMSmoothSize (numeric,        [5,5,1])  smoothing size used in third pass for WaveMask
+%       WMblurCutoff (numeric,            0.3)  minimum value after smoothing in third pass of WaveMask
+
+
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -136,6 +148,17 @@ addParameter(p,'MaxWaveLength',[1,1,1].*99e99,CheckLambda);  %crazy-large defaul
 addParameter(p,'MinWaveLength',[1,1,1].*0,CheckLambda);  %zero default
 
 
+
+%WaveMask is logical, but has six tunable parameters we want to expose as options
+%NOTE: most of these values have been found through tuning on selected cases.
+addParameter(p,'WaveMask',true,@islogical);  %assumes we want to calculate the binary wave mask
+CheckWMParams = @(x) validateattributes(x,{'numeric'},{'>=',0});
+addParameter(p,      'WMVars', {'k','l'},       @iscell);
+addParameter(p,    'WMDerivs',     [1,2],    @isinteger);
+addParameter(p, 'WMsumCutoff',     0.375, CheckWMParams);
+addParameter(p,'WMsizeCutoff',       150, CheckWMParams);
+addParameter(p,'WMblurCutoff',       0.3, CheckWMParams);
+addParameter(p,'WMSmoothSize',   [5,5,1], CheckWMParams);
 
 
 %parse the inputs, and tidy up
@@ -324,7 +347,6 @@ xt_mid = floor(sz(1)./2);
 az_at(end+1) = az_at(end);
 az_at = repmat(az_at,size(ST.kh,1),1,size(ST.kh,3));
 
-
 % add angles... (since they both should be clockwise from north)
 ang_north = wrapTo180(az_at + ang_at);
 
@@ -336,7 +358,15 @@ ST.l = ST.kh .* cosd(ang_north);
 ST.m = ST.F3;
 
 %same for 2D+1, if done
-if  Input.TwoDPlusOne;  
+if  Input.TwoDPlusOne; 
+
+  %work out the angle relative to along track afresh
+  ang_at = atan2d(ST.F1_2dp1,ST.F2_2dp1);
+
+  %hence, the new ang_north is...
+  ang_north = wrapTo180(az_at + ang_at);
+
+  %and so the 2D+1 outputs are..
   ST.kh_2dp1 = quadadd(ST.F1_2dp1,ST.F2_2dp1);
   ST.k_2dp1  = ST.kh_2dp1 .* sind(ang_north);
   ST.l_2dp1  = ST.kh_2dp1 .* cosd(ang_north);
@@ -346,6 +376,23 @@ end
 
 clear sz ang_at az_at ang_north xt_mid
 
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% compute binary mask of whether we think a wave is present
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+if Input.WaveMask
+
+
+
+
+  ST.WaveMask = bettermask(ST, Input.WMsumCutoff,  ...
+                               Input.WMsizeCutoff, ...
+                               Input.WMblurCutoff, ...
+                               Input.WMVars,       ...
+                               Input.WMSmoothSize, ...
+                               Input.WMDerivs      );
+  
+end
 
 %done!
 return
@@ -456,4 +503,76 @@ function [c] = quadadd(a,b)
 
 c = sqrt(a.^2 + b.^2);
 return
+
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Peter Berthelemy's masking code
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+function Mask = bettermask(strans, sumCutoff, sizeCutoff, blurCutoff,Vars,SmoothSize,Derivs)
+%{
+Creates a mask given an S-transform and a cutoff
+Generally works by normalising the variables to between -1 and 1
+Then takes the absolute difference between consecutive points
+Sum these together for each variable (plus the second differential of each)
+Anything less than the given cutoff is assumed to be a wave
+Anything above the cutoff is noise
+
+Then removes any small waves (this is slow feel free to comment out)
+Does some smoothing and image wrangling then the mask is complete
+%
+%written by Peter Berthelemy, May 2023
+%reformatted by Corwin Wright, June 2023 - no change to fundamental logic, but large syntactic changes and some generalisation
+%}
+
+%create an array we will use to sum all of the tests applied
+Sigma = zeros(size(strans.A));
+
+%now, for each variable used in the test...
+for iVar=1:1:numel(Vars)
+
+  %extract the variable from the input S-Transform structure and normalise it into the range -1 to 1
+  V = strans.(Vars{iVar});
+  V = ((V-min(V(:)))./range(V(:))) .*2 -1;
+
+  %compute the absolute value of the chosen derivatives in each direction, and add this to the Sigma array
+  for iDiff=Derivs
+    for iDir=1:1:2; %AT and XT directions. Z direction not used. 
+      if     iDir == 1; x = size(V,1)-iDiff; y = size(V,2);
+      elseif iDir == 2; x = size(V,1);       y = size(V,2)-iDiff;
+      end     
+      Sigma(1:x,1:y,:) = Sigma(1:x,1:y,:) + abs(diff(V,iDiff,iDir));
+    end
+  end
+
+end; clear iVar V iDiff iDir x y strans
+
+%now, apply the cutoff to produce a binary mask
+Mask = zeros(size(Sigma));
+Mask(Sigma <= sumCutoff.*numel(Derivs).*numel(Vars)) = 1;
+clear sumCutoff
+
+%this mask is jumpy, which waves usually aren't. 
+%to resolve this, first discard small unconnected regions at each height individually 
+%(3D here is extremely computationally expensive and would give similar results)
+Mask2 = zeros(size(Mask));
+for iZ=1:1:size(Mask,3)
+  pp = regionprops(logical(Mask(:,:,iZ)), 'area', 'PixelIdxList');
+  stats = pp([pp.Area] > sizeCutoff);
+  M3 = Mask2(:,:,iZ);
+  M3(vertcat(stats.PixelIdxList)) = 1;
+  Mask2(:,:,iZ) = M3;
+end; 
+Mask = Mask2;
+clear Mask2 iZ pp stats M3 sizeCutoff
+
+%finally, apply some smoothing to the end product and then filter the final product one last time
+Mask = smoothn(Mask,SmoothSize);
+Mask(Mask > blurCutoff) = true;
+Mask(Mask~=1) = 0;
+Mask = imclose(Mask, strel("disk",2));
+Mask = imfill(Mask, 'holes');
 

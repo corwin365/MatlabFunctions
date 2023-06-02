@@ -156,7 +156,7 @@ try
             evalin('caller', ['load(' quotedFile ');']);
             setStatusBar(~isempty(whos('-file', fn)));
             return;
-        elseif strcmpi(ext, '.nc')
+        elseif strcmpi(ext, '.nc') | strcmpi(ext, '.nc4')
         %is it a netCDF file?
             quotedFile = ['''' strrep(fn, '''', '''''') ''''];
             evalin('caller', ['netCDF = rCDF(' quotedFile ');']);
