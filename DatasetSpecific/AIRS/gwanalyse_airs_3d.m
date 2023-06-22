@@ -69,6 +69,7 @@ function [ST,Airs,Error,ErrorInfo] = gwanalyse_airs_3d(Airs,varargin)
 %    MaxWaveLength   (array,   [1,1,1].*99e99)  maximum output wavelength
 %    NotAirsData     (logical,          false)  overrides some of the sanity checks on AIRS data formatting
 %    TwoDPlusOne     (logical,          false)  *ADDITIONALLY* compute vertical wavelengths with 2D+1 method
+%    NoThreeDST      (logical,          false)  *DO NOT* compute the 3DST
 %
 %    WaveMask        (logical,           true)  compute a binary mask (1 = wave present, 0 = no wave) using Peter Berthelemy's method (paper in prep). 
 %     This has the following tunable parameters:
@@ -137,8 +138,11 @@ addParameter(p,'HeightScaling',true,@islogical);  %assumes we want to scale the 
 addParameter(p,'NotAirsData',false,@islogical);  %assumes we are feeding the routine AIRS data
 
 %TwoDPlusOne is logical, and its settings are a struct (which should be blank if not set)
-addParameter(p,        'TwoDPlusOne',   false,@islogical); 
+addParameter(p,        'TwoDPlusOne',  false,@islogical); 
 addParameter(p,'TwoDPlusOneSettings',struct(),@isstruct); 
+
+%3DST on or off?
+addParameter(p,'NoThreeDST',false,@islogical); 
 
 %MaxWaveLength must be an positive real number
 CheckLambda = @(x) validateattributes(x,{'numeric'},{'>=',0});
@@ -170,9 +174,16 @@ parse(p,Airs,varargin{:});
 %pull out the contents into struct "Inputs", used throughout rest of routine
 Input = p.Results;
 
+%if we want NEITHER the 3DST NOR the 2D+1 ST, then there's not muich point proceeding
+if Input.TwoDPlusOne ~= 1 && Input.NoThreeDST == 1;
+  Error = 1;
+  ErrorInfo = 'Both 3DST and 2D+1 ST disabled, quitting';
+  return
+end
+
 %tidy up
 clearvars -except Input ST Airs Error ErrorInfo TwoDSettings
-clear CheckNScales CheckZRange CheckSpacing CheckLambda
+clear CheckNScales CheckZRange CheckSpacing CheckLambda CheckWMParams
 
 
 
@@ -259,49 +270,50 @@ end
 %% do ST
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-%scale in height, to compensate for wave amplitude growth
-if Input.HeightScaling;
-  %find scale height at reference level
-  
-  NormHeight = 42; %shouldn't matter at all as the caling is uniform, so let's leave this hardcoded for once
-  H = scale_height(NormHeight);
-  
-  %and hence compute correction factor for each height
-  CFac = exp(-(Airs.ret_z-NormHeight) ./ (2*H));  
-  
-  %repmat out to full size of data
-  sz = size(Airs.Tp);
-  CFac = repmat(permute(CFac,[2,3,1]),sz(1),sz(2),1);
+%only do if we want 3DST output
+if Input.NoThreeDST ~= 1;
 
-  %apply it to the TPrime data
-  Airs.Tp = Airs.Tp .* CFac;
+  %scale in height, to compensate for wave amplitude growth
+  if Input.HeightScaling;
+    %find scale height at reference level
 
-  clear NormHeight H sz
+    NormHeight = 42; %shouldn't matter at all as the caling is uniform, so let's leave this hardcoded for once
+    H = scale_height(NormHeight);
+  
+    %and hence compute correction factor for each height
+    CFac = exp(-(Airs.ret_z-NormHeight) ./ (2*H));  
+  
+    %repmat out to full size of data
+    sz = size(Airs.Tp);
+    CFac = repmat(permute(CFac,[2,3,1]),sz(1),sz(2),1);
+
+    %apply it to the TPrime data
+    Airs.Tp = Airs.Tp .* CFac;
+
+    clear NormHeight H sz
+  end
+
+  %do the 3DST
+
+  ST = nph_ndst(Airs.Tp,                                ...
+                Input.NScales,                          ...
+                PointSpacing,                           ...
+                Input.c,                                ...
+                'maxwavelengths', Input.MaxWaveLength , ...
+                'minwavelengths', Input.MinWaveLength);
+
+  if Input.HeightScaling;
+    Airs.Tp = Airs.Tp ./ CFac;
+    ST.A    = ST.A    ./ CFac;
+    ST.HA   = ST.HA   ./ CFac;
+    ST.R    = ST.R    ./ CFac;
+    ST.HR   = ST.HR   ./ CFac;
+    ST.IN_scaled = ST.IN;
+    ST.IN   = ST.IN   ./ CFac;
+  
+    clear CFac
+  end
 end
-
-% do the ST
-ST = nph_ndst(Airs.Tp,                                ...
-              Input.NScales,                          ...
-              PointSpacing,                           ...
-              Input.c,                                ...
-              'maxwavelengths', Input.MaxWaveLength , ...
-              'minwavelengths', Input.MinWaveLength);
-
-
-if Input.HeightScaling;
-  Airs.Tp = Airs.Tp ./ CFac;
-  ST.A    = ST.A    ./ CFac;
-  ST.HA   = ST.HA   ./ CFac;
-  ST.R    = ST.R    ./ CFac;
-  ST.HR   = ST.HR   ./ CFac;
-  ST.IN_scaled = ST.IN;
-  ST.IN   = ST.IN   ./ CFac;
-  
-  
-  
-  clear CFac
-end
-
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %if requested, also use the 2D+1 method to compute vertical wavelength
@@ -316,14 +328,18 @@ if  Input.TwoDPlusOne;
                              'maxwavelengths',Input.MaxWaveLength);
   clear Spacing
 
+  %if we don't have an IN field to refer to, create it
+  if ~isfield(ST,'IN'); ST.IN = NewFields.IN; end
+
   %tidy up unwanted variables
   NewFields = rmfield(NewFields,{'type','IN','scales','point_spacing','c','freqs'});
 
-  %add those fields to the main ST array
+  %add ST output fields to the main ST array
   Fields = fieldnames(NewFields);
   for iF=1:1:numel(Fields);
     ST.([Fields{iF},'_2dp1']) = NewFields.(Fields{iF});
   end; clear iF Fields NewFields
+
 
 end
   
@@ -333,29 +349,36 @@ end
 %ok. geometry time. convert from F1, F2 (,F3)  to k, l (,m)
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
+%get array 
+% sz = size(ST.IN);
 
-%% COMPUTE ANGLES AND PROJECT:
-ST.kh = quadadd(ST.F1,ST.F2);
-sz = size(ST.A);
-
-% find angle CLOCKWISE from along track direction...
-ang_at = atan2d(ST.F1,ST.F2);
-
-% find azimuth of AT direction CLOCKWISE from north...
-xt_mid = floor(sz(1)./2);
-[~,az_at] = distance(Airs.l1_lat(xt_mid,1:end-1,1),Airs.l1_lon(xt_mid,1:end-1,1),Airs.l1_lat(xt_mid,2:end,1),Airs.l1_lon(xt_mid,2:end,1));
+% find azimuth of AT direction CLOCKWISE from north
+xt_mid = floor(size(ST.IN,1)./2);
+[~,az_at] = distance(Airs.l1_lat(xt_mid,1:end-1,1),Airs.l1_lon(xt_mid,1:end-1,1), ...
+                     Airs.l1_lat(xt_mid,2:end,  1),Airs.l1_lon(xt_mid,2:end,  1));
 az_at(end+1) = az_at(end);
-az_at = repmat(az_at,size(ST.kh,1),1,size(ST.kh,3));
+az_at = repmat(az_at,size(ST.IN,1),1,size(ST.IN,3));
 
-% add angles... (since they both should be clockwise from north)
-ang_north = wrapTo180(az_at + ang_at);
 
-% finally, find k and l:
-ST.k = ST.kh .* sind(ang_north);
-ST.l = ST.kh .* cosd(ang_north);
+if Input.NoThreeDST ~= 1;
 
-%finally, m 
-ST.m = ST.F3;
+  %% COMPUTE ANGLES AND PROJECT:
+  ST.kh = quadadd(ST.F1,ST.F2);
+
+  % find angle CLOCKWISE from along track direction...
+  ang_at = atan2d(ST.F1,ST.F2);
+
+  % add angles... (since they both should be clockwise from north)
+  ang_north = wrapTo180(az_at + ang_at);
+
+  % finally, find k and l:
+  ST.k = ST.kh .* sind(ang_north);
+  ST.l = ST.kh .* cosd(ang_north);
+
+  %finally, m
+  ST.m = ST.F3;
+
+end
 
 %same for 2D+1, if done
 if  Input.TwoDPlusOne; 
@@ -382,15 +405,28 @@ clear sz ang_at az_at ang_north xt_mid
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 if Input.WaveMask
 
-
-
-
-  ST.WaveMask = bettermask(ST, Input.WMsumCutoff,  ...
-                               Input.WMsizeCutoff, ...
-                               Input.WMblurCutoff, ...
-                               Input.WMVars,       ...
-                               Input.WMSmoothSize, ...
-                               Input.WMDerivs      );
+  
+  %if the 3DST calculation is disabled, we won't have the fields we need to compute the mask
+  %if so, copy the fields over that we need and use these instead
+  if ~isfield(ST,'A')
+    Fields = fieldnames(ST);
+    Working = struct();
+    for iF=1:1:numel(Fields)
+      Fin  = Fields{iF};
+      Fout = strrep(Fin,'_2dp1','');
+      Working.(Fout) = ST.(Fin);
+    end
+  else  Working = ST;
+  end
+ 
+  %compute the mask
+  ST.WaveMask = bettermask(Working, Input.WMsumCutoff,  ...
+                                    Input.WMsizeCutoff, ...
+                                    Input.WMblurCutoff, ...
+                                    Input.WMVars,       ...
+                                    Input.WMSmoothSize, ...
+                                    Input.WMDerivs      );
+  clear Working
   
 end
 
@@ -512,7 +548,7 @@ return
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 
-function Mask = bettermask(strans, sumCutoff, sizeCutoff, blurCutoff,Vars,SmoothSize,Derivs)
+function Mask = bettermask(strans, sumCutoff, sizeCutoff, blurCutoff,Vars,SmoothSize,Derivs,Use2D)
 %{
 Creates a mask given an S-transform and a cutoff
 Generally works by normalising the variables to between -1 and 1
@@ -560,19 +596,14 @@ clear sumCutoff
 %(3D here is extremely computationally expensive and would give similar results)
 Mask2 = zeros(size(Mask));
 for iZ=1:1:size(Mask,3)
-  pp = regionprops(logical(Mask(:,:,iZ)), 'area', 'PixelIdxList');
-  stats = pp([pp.Area] > sizeCutoff);
-  M3 = Mask2(:,:,iZ);
-  M3(vertcat(stats.PixelIdxList)) = 1;
-  Mask2(:,:,iZ) = M3;
+  pp = regionprops(logical(Mask(:,:,iZ)), 'area', 'PixelIdxList'); stats = pp([pp.Area] > sizeCutoff);
+  M3 = Mask2(:,:,iZ); M3(vertcat(stats.PixelIdxList)) = 1; Mask2(:,:,iZ) = M3;
 end; 
 Mask = Mask2;
 clear Mask2 iZ pp stats M3 sizeCutoff
 
 %finally, apply some smoothing to the end product and then filter the final product one last time
 Mask = smoothn(Mask,SmoothSize);
-Mask(Mask > blurCutoff) = true;
-Mask(Mask~=1) = 0;
-Mask = imclose(Mask, strel("disk",2));
-Mask = imfill(Mask, 'holes');
+Mask(Mask > blurCutoff) = 1; Mask(Mask~=1) = 0;
+Mask = imclose(Mask, strel("disk",2)); Mask = imfill(Mask, 'holes');
 
