@@ -4,7 +4,7 @@ function StructA = cat_struct(StructA,StructB,Dimension,VarsToIgnore)
 % concatenate all variables in two structs, with specified exceptions
 %
 %
-%StructA and StructB are twostructure containing identically-formatted fields (with specified exceptions)
+%StructA and StructB are two structure containing identically-formatted fields (with specified exceptions)
 %dimension is the dimension to concatenate in
 %VarsToIgnore is a cell array listing any variables we do not want to do this to
 %

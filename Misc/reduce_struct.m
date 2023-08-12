@@ -1,18 +1,28 @@
-function Struct = reduce_struct(Struct,SubSetIndices,VarsToExclude)
+function Struct = reduce_struct(Struct,SubSetIndices,VarsToExclude,Dim)
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%
-% select a given list of indices from every variable in a struct, and
-% return the reduced struct
+%For a series of identical fields in a struct(), select a given set of 
+%indices from every field
 %
+%For backwards-comptability with older versions, VarsToExclude needs to be
+%ordered before Dim. If we want to operate on ALL fields, just set this to [].
 %
-%Struct is a structure containing identically-formatted fields (with specified exceptions)
-%SubSetIndices are the indices we wish to *keep* from each. Fields will become 1d if not already.
-%VarsToExclude is a cell array listing any variables we do not want to reduce.
+%inputs:
+%  Struct        - the struct to operate on
+%  SubSetIndices - the list of indices to select from each field
+%  VarsToExclude - fields to ignore when subsettings
+%  Dim           - the dimension to operate on for each field
 %
-%Corwin Wright, c.wright@bath.ac.uk, 2002/JUN/01
+%outputs:
+%  Struct        - the  reduced structure
+
+%
+%Corwin Wright, c.wright@bath.ac.uk, 2020/JUN/01
+%updated 2023/08/12 to let the user choose a dimension to operate along
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-if ~exist('VarsToExclude','var'); VarsToExclude = {' '}; end
+if ~exist('VarsToExclude','var'); VarsToExclude = {' '}; end  %assume applies to all vars
+if ~exist(          'Dim','var'); Dim = 1;               end  %assume operation is along first dimension
 
 
 Fields = fieldnames(Struct);
@@ -23,7 +33,7 @@ for iField=1:1:numel(Fields);
 
   %reduce desired variables
   F = Struct.(Fields{iField});
-  F = F(SubSetIndices);
+  F = index_dim(F,SubSetIndices,Dim);
   Struct.(Fields{iField}) = F;
   
   %done!
