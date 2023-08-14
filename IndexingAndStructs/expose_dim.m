@@ -4,7 +4,7 @@ function [Matrix,DimSize,DimOrder] = expose_dim(Array,Dim)
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %Take an n-dimensional Matlab array and reshape such that the array
 %becomes 2D with the chosen dimension as the first and all other 
-%dimensions are merged in the second
+%dimensions merged in the second
 %
 %To restore the original dimensions assuming no changes to size, use this syntax:
 %    Restored = permute(reshape(Matrix,NewSize),NewOrder);
