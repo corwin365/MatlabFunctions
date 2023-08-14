@@ -7,10 +7,10 @@ function [Matrix,DimSize,DimOrder] = expose_dim(Array,Dim)
 %dimensions merged in the second
 %
 %To restore the original dimensions assuming no changes to size, use this syntax:
-%    Restored = permute(reshape(Matrix,NewSize),NewOrder);
+%    Restored = permute(reshape(Matrix,DimSize),DimOrder);
 %
 %If changes have been made to the exposed dimension, e.g. interpolation or selection, use this syntax:
-%    Restored = permute(reshape(Matrix,[size(Matrix,1),NewSize(2:end)]),NewOrder);
+%    Restored = permute(reshape(Matrix,[size(Matrix,1),DimSize(2:end)]),DimOrder);
 %
 %inputs:
 %  Array: n-dimensional input array
