@@ -4,7 +4,7 @@ function Struct = reduce_struct(Struct,SubSetIndices,VarsToExclude,Dim)
 %For a series of identical fields in a struct(), select a given set of 
 %indices from every field
 %
-%For backwards-comptability with older versions, VarsToExclude needs to be
+%For backwards-compatability with older versions, VarsToExclude argument needs to be
 %ordered before Dim. If we want to operate on ALL fields, just set this to [].
 %
 %inputs:

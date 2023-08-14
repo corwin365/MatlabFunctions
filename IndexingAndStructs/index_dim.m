@@ -15,7 +15,7 @@ function Array = index_dim(Array,Indices,Dim)
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 %input handling
-if nargin      < 3; Dim = 1; end          %assume first dimension if not specified, and set varargin to blank if not set
+if nargin      < 3; Dim = 1; end     %assume first dimension if not specified, and set varargin to blank if not set
 if numel(Dim) == 0; Dim = 1; end     %if set to blank, then set first dimension
 
 %expose the desired dimension
