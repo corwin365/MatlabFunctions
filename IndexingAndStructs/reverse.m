@@ -23,7 +23,7 @@ if ~exist('Dim','var'); Dim = 1; end
 
 if Dim == 0; 
   %reverse all values regardless of dimension
-  %make sure you know what you want going in...
+  %make sure you know what you want...
   sz = size(y);
   y = y(:);
   y = y(end:-1:1);
