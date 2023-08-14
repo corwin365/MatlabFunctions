@@ -6,7 +6,7 @@ function y = reverse(y,Dim)
 %
 %inputs:
 %  y                           - array to be reversed
-%  Dim (optional, default = 1) - dimension to reversealong
+%  Dim (optional, default = 1) - dimension to revers ealong
 %
 %Set Dim to zero to reverse all values regardless of dimension.
 %
