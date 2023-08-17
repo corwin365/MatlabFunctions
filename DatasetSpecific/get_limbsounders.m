@@ -1,0 +1,412 @@
+function Data =  get_limbsounders(TimeRange,Instrument,varargin)
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%general-purpose function to load and format limb sounder data
+%loads a specific set of instruments in the formats I store them, so
+%may not work on your system!
+%
+%Corwin Wright, c.wright@bath.ac.uk, 2023/08/15
+%
+%inputs:
+%  required:
+%    TimeRange [double] - time range, in Matlab units. Usually takes 2-element array
+%                         can also take one number, assumed to be a whole day
+%    Instrument [string] - instrument name to load, from specified list
+%
+%  optional:
+%
+%    VarName         (type,           default)  description
+%    -----------------------------------------------------------------------------
+%    HeightScale     (numeric,        0:1:100)  heightscale to interpolate the data onto, in km
+%    AdditionalVars  (cell,                {})  list of additional variables to extract, if available  
+%
+%
+%outputs:
+%   Data: struct containing all variables, on a [profiles x height] grid
+%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% instruments we can use this on, and their properties
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%GNSS
+InstInfo.GNSS.TimeRange     = [datenum(2002,1,1),datenum(9999,999,999)]; %still running at time of writing
+InstInfo.GNSS.HeightRange   = [0,40];
+InstInfo.GNSS.Path          = [LocalDataDir,'/GNSS'];
+
+%HIRDLS
+InstInfo.HIRDLS.TimeRange   = [datenum(2005,1,29),datenum(2008,1,77)];
+InstInfo.HIRDLS.HeightRange = [0,80];
+InstInfo.HIRDLS.Path        = [LocalDataDir,'/HIRDLS'];
+
+%MLS
+%only currently loads temperature files, due to the way I have them stored
+InstInfo.MLS.TimeRange   = [datenum(2004,1,275),datenum(9999,999,999)]; %still running at time of writing
+InstInfo.MLS.HeightRange = [0,100];
+InstInfo.MLS.Path        = [LocalDataDir,'/MLS/T/'];
+
+%SABER
+InstInfo.SABER.TimeRange   = [datenum(2002,1,1),datenum(9999,999,999)];
+InstInfo.SABER.HeightRange = [0,120];
+InstInfo.SABER.Path        = [LocalDataDir,'/SABER/rawnc-v2/'];
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% input parsing
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+ 
+%create parser object
+%%%%%%%%%%%%%%%%%%%%%%
+p = inputParser;
+
+%validation of inputs
+%%%%%%%%%%%%%%%%%%%%%%
+
+%date
+CheckDates  = @(x) validateattributes(x,{'numeric'},{'>=',datenum(1979,1,1)});
+addRequired(p,'TimeRange',CheckDates); %time range
+
+%instrument(s)
+CheckInst  = @(x) validateStringParameter(x,fieldnames(InstInfo),mfilename,Instrument);
+addRequired(p,'Instrument',CheckInst)
+
+
+%height range
+CheckHeights = @(x) validateattributes(x,{'numeric'},{'>=',0}); 
+addParameter(p,'HeightScale',0:1:100,CheckHeights)
+
+%additional variables
+addParameter(p,'AdditionalVars',{},@iscell)
+
+
+%parse inputs and tidy up
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%parse inputs
+parse(p,TimeRange,Instrument,varargin{:})
+
+%additional check on dates - must be either a single value (a day to load all of) or two values (start and end time)
+if     numel(TimeRange)  > 2;  error('TimeRange must be either one value (a day of interest) or two values (a time range)');
+elseif numel(TimeRange) == 1; TimeRange = [floor(TimeRange),floor(TimeRange)+1-1e-8]; end % strictly the latter bound is 1ms less than a day
+
+%additional check on dates - must be in valid range for instrument
+if   min(TimeRange) > InstInfo.(Instrument).TimeRange(2) ...
+   | max(TimeRange) < InstInfo.(Instrument).TimeRange(1)
+  error(['Data for ',Instrument,' is only available from ',datestr(InstInfo.(Instrument).TimeRange(1)),' to ',datestr(InstInfo.(Instrument).TimeRange(2))]);
+end
+
+
+%pull out the contents into struct "Inputs", used throughout rest of routine
+Input = p.Results;
+Input.TimeRange = TimeRange;
+clearvars -except InstInfo Input
+
+%extract just the info for the instrument we want
+InstInfo  = InstInfo.(Input.Instrument);
+
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% loading - instrument specific
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%at the end of this we want a struct called Data containing the following
+%variables on a grid of [profiles x levels]
+%
+%Lat  - latitude
+%Lon  - longitude, using -180 to 180 range
+%Time - time, in Matlab units
+%Temp - temperature, in K
+%Pres - pressure, in hPa
+%Alt  - height, in km
+% + any additional vars requested if valid for that instrument
+
+%list of variables
+Vars = [{'Lat','Lon','Time','Temp','Pres','Alt'},Input.AdditionalVars];
+
+%empty structure to store data
+Data = struct();
+for iVar=1:1:numel(Vars); Data.(Vars{iVar}) = []; end
+
+
+switch Input.Instrument
+
+
+  case 'GNSS'
+
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    % merged GNSS product
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+    for DayNumber=floor(min(Input.TimeRange)):1:floor(max(Input.TimeRange));
+
+      %work out year and day number and hence filepath
+      [y,~,~] = datevec(DayNumber); dn = date2doy(DayNumber);
+      File = [InstInfo.Path,'/',sprintf('%04d',y),'/merged_ro_',sprintf('%04d',y),'_',sprintf('%03d',dn),'.mat'];
+      if ~exist(File,'file'); clear y dn File; continue; end
+
+      %load the data
+      GNSS = load(File);
+      clear y dn File
+
+      %get the variables we want
+      Store = struct();
+
+      for iVar=1:1:numel(Vars)
+
+        if ~strcmp(Vars{iVar},'Alt') && ~strcmp(Vars{iVar},'Time') && ~strcmp(fieldnames(GNSS),Vars{iVar});
+          disp(['Variable ',Vars{iVar},' not found, terminating'])
+          return
+        end
+
+        switch Vars{iVar}
+          case 'Time'; Store.Time = repmat(GNSS.MetaData.time,[1,size(GNSS.Lat,2)]);
+          case 'Alt';  Store.Alt  = repmat(GNSS.MSL_alt,[size(GNSS.Lat,1),1]);
+          otherwise;   Store.(Vars{iVar}) = GNSS.(Vars{iVar});
+        end
+
+      end; clear iVar
+
+      %store in main repository
+      Data = cat_struct(Data,Store,1);
+
+      clear Store iVar
+
+    end; clear DayNumber
+
+  case 'HIRDLS'
+
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    % HIRDLS
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+    for DayNumber=floor(min(Input.TimeRange)):1:floor(max(Input.TimeRange));
+
+      %work out year and day number and hence filepath
+      [y,~,~] = datevec(DayNumber); dn = date2doy(DayNumber);
+      File = wildcardsearch(InstInfo.Path,['_',sprintf('%04d',y),'d',sprintf('%03d',dn)]);
+      if numel(File) == 0; clear y dn File; continue; end
+
+
+      
+      %load variables we need
+      Store = struct();
+      for iVar=1:1:numel(Vars)
+        switch Vars{iVar}
+          case 'Temp'; Store.Temp         = get_HIRDLS(File{1},'Temperature')';
+          case 'Lat';  Store.Lat          = get_HIRDLS(File{1},'Latitude');
+          case 'Lon';  Store.Lon          = get_HIRDLS(File{1},'Longitude');
+          case 'Alt';  Store.Alt          = get_HIRDLS(File{1},'Altitude')';
+          case 'Pres'; Store.Pres         = get_HIRDLS(File{1},'Pressure'); 
+          case 'Time'; Store.Time         = datenum(1993,1,1,0,0,get_HIRDLS(File{1},'Time'));
+          otherwise;  
+            try;   Store.(Vars{iVar}) = get_HIRDLS(File{1},Vars{iVar}); 
+            catch; disp(['Variable ',Vars{iVar},' not found, terminating']); return
+            end
+        end      
+      end
+
+      %reshape 1d variables
+      Store.Lat  = repmat(Store.Lat,  [1,size(Store.Temp,2)]);
+      Store.Lon  = repmat(Store.Lon,  [1,size(Store.Temp,2)]);
+      Store.Time = repmat(Store.Time, [1,size(Store.Temp,2)]);
+      Store.Pres = repmat(Store.Pres',[size(Store.Temp,1),1]);
+
+      %store in main repository
+      Data = cat_struct(Data,Store,1);
+
+      clear Store iVar y dn File
+
+
+    end; clear DayNumber
+
+
+  case 'MLS'
+
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    % MLS
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+    for DayNumber=floor(min(Input.TimeRange)):1:floor(max(Input.TimeRange));
+
+      %work out year and day number and hence filepath
+      [y,~,~] = datevec(DayNumber); dn = date2doy(DayNumber);
+      File = wildcardsearch(InstInfo.Path,['_',sprintf('%04d',y),'d',sprintf('%03d',dn)]);
+      if numel(File) == 0; clear y dn File; continue; end
+
+      %load data for day
+      Working = get_MLS(File{1},'Temperature');
+      %load variables we need
+      Store = struct();
+      for iVar=1:1:numel(Vars)
+        switch Vars{iVar}
+          case 'Temp'; Store.Temp         = Working.L2gpValue';
+          case 'Lat';  Store.Lat          = Working.Latitude;
+          case 'Lon';  Store.Lon          = Working.Longitude;
+          case 'Alt';  Store.Alt          = p2h(Working.Pressure);
+          case 'Pres'; Store.Pres         = Working.Pressure;
+          case 'Time'; Store.Time         = datenum(1993,1,1,0,0,Working.Time);
+          otherwise;  
+            try;   Store.(Vars{iVar}) = get_HIRDLS(File{1},Vars{iVar}); 
+            catch; disp(['Variable ',Vars{iVar},' not found, terminating']); return
+            end
+        end      
+      end
+
+
+      %reshape 1d variables
+      Store.Lat  = repmat(Store.Lat,  [1,size(Store.Temp,2)]);
+      Store.Lon  = repmat(Store.Lon,  [1,size(Store.Temp,2)]);
+      Store.Time = repmat(Store.Time, [1,size(Store.Temp,2)]);
+      Store.Pres = repmat(Store.Pres',[size(Store.Temp,1),1]);
+      Store.Alt  = repmat(Store.Alt', [size(Store.Temp,1),1]);
+
+      %store in main repository
+      Data = cat_struct(Data,Store,1);
+
+      clear Store iVar y dn File Working
+
+
+    end; clear DayNumber
+
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    % SABER
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+  case 'SABER';
+
+    %monthly files, ugh
+    OldData.Data = struct();
+    OldData.Name = '';
+
+    for DayNumber=floor(min(Input.TimeRange))-1:1:floor(max(Input.TimeRange));  %we need to use the day before the start as well as the underlying data format is orbit-based, not day-based
+
+      %identify file and load, but only if we didn't on a previous loop
+      [y,~,~] = datevec(DayNumber);
+      m = month(datetime(DayNumber,'ConvertFrom','datenum'),'name'); m = m{1};
+      File = wildcardsearch(InstInfo.Path,[m,num2str(y)]);
+
+      if numel(File) == 0; clear y m File; continue; end
+
+      if ~strcmp(OldData.Name,File{1});
+
+        %load file
+        OldData.Name = File{1};
+        OldData.Data = rCDF(File{1});
+
+        %put dates in a useful unit. We'll handle time within day later, as this can be quite computationally expensive.
+        for iEl=1:1:numel(OldData.Data.date)
+          id = num2str(OldData.Data.date(iEl));
+          OldData.Data.Date(iEl) = datenum(str2num(id(1:4)),1,str2num(id(5:7)),0,0,OldData.Data.time(iEl)./1000);
+        end
+
+      end
+
+      clear File y m
+
+      %select the day we actually want
+      Working = OldData.Data;
+      OnThisDay = find(floor(Working.Date) == DayNumber);
+      Working = reduce_struct(Working,OnThisDay,{'orbit','date','MetaData'},2);
+      Working.orbit = Working.orbit(OnThisDay); Working.date = Working.date(OnThisDay);
+      clear OnThisDay
+
+      %now, extract the values we want
+      Store.Lat = Working.tplatitude';
+      Store.Lon = Working.tplongitude';
+      Store.Pres = Working.pressure';
+      Store.Alt = Working.tpaltitude';
+      Store.Temp = Working.ktemp';
+
+      %remove bad heights, as they break the interpolation below
+      Store.Alt(Store.Alt > 1000) = NaN;
+
+      %time is a bit more awkward. This is horrible, but it is what it is.
+      Working.date = repmat(Working.date,[1,size(Working.time,1)])';
+      year = floor(Working.date./1000);
+      dn   = Working.date - year.*1000;
+      s    = Working.time./1000; s(s < 0) = NaN;
+      Store.Time = datenum(year,1,dn,1,1,s)';
+
+      %store in main repository, and tidy
+      Data = cat_struct(Data,Store,1);
+
+    end; clear  dn id iEl iVar OldData s Store year working
+
+  otherwise
+
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    % invalid instrument!
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+    disp(['Instrument ',Input.Instrument,' not currently handled by this function, terminating'])
+    return
+
+ 
+end
+
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% interpolate the data to chosen height scale
+%  and make lons -180 to 180
+%  select actual time range specified
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%time range: do first to reduce size for later steps
+%do at profile level to avoid breaking profiles
+Data = reduce_struct(Data,inrange(nanmean(Data.Time,2),Input.TimeRange),[],1);
+
+
+%height scale
+sz = [size(Data.Lat,1),numel(Input.HeightScale)];
+Data2 = struct();
+for iVar=1:1:numel(Vars);
+  a = NaN(sz);
+  b = Data.(Vars{iVar});
+  for iProf=1:1:sz(1)
+    a(iProf,:) = interp1(Data.Alt(iProf,:),b(iProf,:),Input.HeightScale);
+  end;
+  Data2.(Vars{iVar}) = a;
+end
+Data = Data2;
+clear iProf iVar Data2 a b sz
+
+%longitude
+Data.Lon(Data.Lon > 180) = Data.Lon(Data.Lon > 180)-360;
+
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% postprocessing based on input options
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%(currently no options to do this)
+
+
+
+
+
+
+end
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% function to validate list of allowed instruments
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+function validateStringParameter(varargin)
+validatestring(varargin{:});
+end
