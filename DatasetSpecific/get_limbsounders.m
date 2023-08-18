@@ -202,7 +202,7 @@ switch Input.Instrument
           case 'Temp'; Store.Temp         = get_HIRDLS(File{1},'Temperature')';
           case 'Lat';  Store.Lat          = get_HIRDLS(File{1},'Latitude');
           case 'Lon';  Store.Lon          = get_HIRDLS(File{1},'Longitude');
-          case 'Alt';  Store.Alt          = get_HIRDLS(File{1},'Altitude')';
+          case 'Alt';  Store.Alt          = get_HIRDLS(File{1},'Altitude')'./1000;
           case 'Pres'; Store.Pres         = get_HIRDLS(File{1},'Pressure'); 
           case 'Time'; Store.Time         = datenum(1993,1,1,0,0,get_HIRDLS(File{1},'Time'));
           otherwise;  
@@ -379,7 +379,7 @@ for iVar=1:1:numel(Vars);
     [~,uidx] = unique(Data.Alt(iProf,:));
     Good = intersect(Good,uidx);
     if numel(Good) > 2;  a(iProf,:) = interp1(Data.Alt(iProf,Good),b(iProf,Good),Input.HeightScale); end
-    
+
   end;
   Data2.(Vars{iVar}) = a;
 end
