@@ -160,7 +160,7 @@ switch Input.Instrument
 
       for iVar=1:1:numel(Vars)
 
-        if ~strcmp(Vars{iVar},'Alt') && ~strcmp(Vars{iVar},'Time') && ~strcmp(fieldnames(GNSS),Vars{iVar});
+        if ~strcmp(Vars{iVar},'Alt') & ~strcmp(Vars{iVar},'Time') & ~strcmp(fieldnames(GNSS),Vars{iVar});
           disp(['Variable ',Vars{iVar},' not found, terminating'])
           return
         end
@@ -373,12 +373,18 @@ for iVar=1:1:numel(Vars);
   a = NaN(sz);
   b = Data.(Vars{iVar});
   for iProf=1:1:sz(1)
-    a(iProf,:) = interp1(Data.Alt(iProf,:),b(iProf,:),Input.HeightScale);
+
+    %some extra handling here to deal with bad data, but all we're actualy doing is linear interpolation
+    Good = find(isfinite(Data.Alt(iProf,:)) ~=0);
+    [~,uidx] = unique(Data.Alt(iProf,:));
+    Good = intersect(Good,uidx);
+    if numel(Good) > 2;  a(iProf,:) = interp1(Data.Alt(iProf,Good),b(iProf,Good),Input.HeightScale); end
+    
   end;
   Data2.(Vars{iVar}) = a;
 end
 Data = Data2;
-clear iProf iVar Data2 a b sz
+clear iProf iVar Data2 a b sz Good uidx
 
 %longitude
 Data.Lon(Data.Lon > 180) = Data.Lon(Data.Lon > 180)-360;
