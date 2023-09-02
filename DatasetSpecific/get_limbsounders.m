@@ -21,6 +21,7 @@ function Data =  get_limbsounders(TimeRange,Instrument,varargin)
 %    -----------------------------------------------------------------------------
 %    HeightScale     (numeric,        0:1:100)  heightscale to interpolate the data onto, in km
 %    AdditionalVars  (cell,                {})  list of additional variables to extract, if available  
+%    OriginalZ       (logical,          false)  return data on original vertical grid
 %
 %
 %outputs:
@@ -82,7 +83,7 @@ addParameter(p,'HeightScale',0:1:100,CheckHeights)
 
 %additional variables
 addParameter(p,'AdditionalVars',{},@iscell)
-
+addParameter(p,'OriginalZ',false,@islogical)
 
 %parse inputs and tidy up
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -173,6 +174,12 @@ switch Input.Instrument
 
       end; clear iVar
 
+      %temporary fix for some anomalous prs values
+      disp('temporarily using alt > pres instead of pres')
+
+      Store.Pres = h2p(Store.Alt);
+
+
       %store in main repository
       Data = cat_struct(Data,Store,1);
 
@@ -253,12 +260,11 @@ switch Input.Instrument
           case 'Pres'; Store.Pres         = Working.Pressure;
           case 'Time'; Store.Time         = datenum(1993,1,1,0,0,Working.Time);
           otherwise;  
-            try;   Store.(Vars{iVar}) = get_HIRDLS(File{1},Vars{iVar}); 
+            try;   Store.(Vars{iVar}) = Working.(Vars{iVar}); 
             catch; disp(['Variable ',Vars{iVar},' not found, terminating']); return
             end
         end      
       end
-
 
       %reshape 1d variables
       Store.Lat  = repmat(Store.Lat,  [1,size(Store.Temp,2)]);
@@ -266,6 +272,13 @@ switch Input.Instrument
       Store.Time = repmat(Store.Time, [1,size(Store.Temp,2)]);
       Store.Pres = repmat(Store.Pres',[size(Store.Temp,1),1]);
       Store.Alt  = repmat(Store.Alt', [size(Store.Temp,1),1]);
+      for iField=1:1:numel(Input.AdditionalVars);
+        F = Store.(Input.AdditionalVars{iField});
+        if     numel(F) == size(Store.Temp,2); F = repmat(F',[size(Store.Temp,1),1]);
+        elseif numel(F) == size(Store.Temp,1); F = repmat(F, [1,size(Store.Temp,2)]);
+        end
+        Store.(Input.AdditionalVars{iField}) = F;
+      end
 
       %store in main repository
       Data = cat_struct(Data,Store,1);
@@ -303,7 +316,7 @@ switch Input.Instrument
         %put dates in a useful unit. We'll handle time within day later, as this can be quite computationally expensive.
         for iEl=1:1:numel(OldData.Data.date)
           id = num2str(OldData.Data.date(iEl));
-          OldData.Data.Date(iEl) = datenum(str2num(id(1:4)),1,str2num(id(5:7)),0,0,OldData.Data.time(iEl)./1000);
+          OldData.Data.Date(iEl) = datenum(str2double(id(1:4)),1,str2double(id(5:7)),0,0,0);
         end
 
       end
@@ -321,7 +334,7 @@ switch Input.Instrument
       Store.Lat = Working.tplatitude';
       Store.Lon = Working.tplongitude';
       Store.Pres = Working.pressure';
-      Store.Alt = Working.tpaltitude';
+      Store.Alt  = Working.tpaltitude';
       Store.Temp = Working.ktemp';
 
       %remove bad heights, as they break the interpolation below
@@ -365,26 +378,28 @@ end
 %do at profile level to avoid breaking profiles
 Data = reduce_struct(Data,inrange(nanmean(Data.Time,2),Input.TimeRange),[],1);
 
+if Input.OriginalZ == false
 
-%height scale
-sz = [size(Data.Lat,1),numel(Input.HeightScale)];
-Data2 = struct();
-for iVar=1:1:numel(Vars);
-  a = NaN(sz);
-  b = Data.(Vars{iVar});
-  for iProf=1:1:sz(1)
+  %height scale
+  sz = [size(Data.Lat,1),numel(Input.HeightScale)];
+  Data2 = struct();
+  for iVar=1:1:numel(Vars);
+    a = NaN(sz);
+    b = Data.(Vars{iVar});
+    for iProf=1:1:sz(1)
 
-    %some extra handling here to deal with bad data, but all we're actualy doing is linear interpolation
-    Good = find(isfinite(Data.Alt(iProf,:)) ~=0);
-    [~,uidx] = unique(Data.Alt(iProf,:));
-    Good = intersect(Good,uidx);
-    if numel(Good) > 2;  a(iProf,:) = interp1(Data.Alt(iProf,Good),b(iProf,Good),Input.HeightScale); end
+      %some extra handling here to deal with bad data, but all we're actualy doing is linear interpolation
+      Good = find(isfinite(Data.Alt(iProf,:)) ~=0);
+      [~,uidx] = unique(Data.Alt(iProf,:));
+      Good = intersect(Good,uidx);
+      if numel(Good) > 2;  a(iProf,:) = interp1(Data.Alt(iProf,Good),b(iProf,Good),Input.HeightScale); end
 
-  end;
-  Data2.(Vars{iVar}) = a;
+    end;
+    Data2.(Vars{iVar}) = a;
+  end
+  Data = Data2;
+  clear iProf iVar Data2 a b sz Good uidx
 end
-Data = Data2;
-clear iProf iVar Data2 a b sz Good uidx
 
 %longitude
 Data.Lon(Data.Lon > 180) = Data.Lon(Data.Lon > 180)-360;
