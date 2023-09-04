@@ -200,8 +200,6 @@ switch Input.Instrument
       File = wildcardsearch(InstInfo.Path,['_',sprintf('%04d',y),'d',sprintf('%03d',dn)]);
       if numel(File) == 0; clear y dn File; continue; end
 
-
-      
       %load variables we need
       Store = struct();
       for iVar=1:1:numel(Vars)
@@ -225,7 +223,6 @@ switch Input.Instrument
       Store.Time = repmat(Store.Time, [1,size(Store.Temp,2)]);
       Store.Pres = repmat(Store.Pres',[size(Store.Temp,1),1]);
 
-
       %HIRDLS stores geolocation at the 30km level, but travels while scanning up and down
       %see Wright et al (ACP, 2015) for the logic of what we're going to do here to reverse
       %this choice and get 'true' lat and lon values
@@ -245,12 +242,10 @@ switch Input.Instrument
         dx(:,iLev) =  KmAlongtrackPerKmVertical.*(iLev-zidx);
         [Store.Lat(:,iLev),Store.Lon(:,iLev)] = reckon(Store.Lat(:,zidx),Store.Lon(:,zidx),km2deg(dx(:,iLev)),Theta);  
       end
-
       clear zidx Theta KmAlongtrackPerKmVertical dx iLev
 
       %store in main repository
       Data = cat_struct(Data,Store,1);
-
       clear Store iVar y dn File
 
 
