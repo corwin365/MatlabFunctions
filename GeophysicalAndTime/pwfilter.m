@@ -6,6 +6,10 @@ function [VarOut,PWStore] = pwfilter(NPWs,MinPC,Lon,Lat,Var,LonGrid,LatGrid,Alt,
 %simple planetary wave filter for application to scattered data as f(lon,lat,alt)
 %altitude is optional - omit last two arguments to apply to 2D data only
 %
+%the first mode will always be the zonal mean, then the other modes
+%will start from number 2 (i.e. modes 1,2,3 are in positions 2,3,4, etc)
+%
+%
 %Corwin Wright, c.wright@bath.ac.uk, 2022/09/23
 %
 %inputs (not in order - check above):
@@ -88,16 +92,23 @@ PWStore = NaN([size(VarGrid),NPWs+1]); %map of PWs
 VGrid   = zeros(size(VarGrid));        %sum of planetary waves at each point
 
 %compute planetary wave value at each data point
-for iPW=1:1:NPWs+1
+for iPW=0:1:NPWs
   for iLine =1:1:size(VarGrid,2)
 
-    %fit PW, then remove from the data so we don't do so again
-    yfit = nph_sinefit(LonAxis,VarGrid(:,iLine),360./iPW);
+    if iPW==0;
+      %take and repmat zonal mean
+      yfit = repmat(nanmean(VarGrid(:,iLine)),[size(VarGrid,1),1]);
+    else
+      %fit PW
+      yfit = nph_sinefit(LonAxis,VarGrid(:,iLine),360./iPW);
+    end
+
+    %remove from the data so we don't do so again
     VarGrid(:,iLine) = VarGrid(:,iLine) - yfit;
 
     %store results
     VGrid(:,iLine) = VGrid(:,iLine)+yfit;
-    PWStore(:,iLine,iPW) = yfit;
+    PWStore(:,iLine,iPW+1) = yfit;
 
     clear yfit F
   end; clear iLine

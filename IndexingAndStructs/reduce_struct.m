@@ -11,7 +11,7 @@ function Struct = reduce_struct(Struct,SubSetIndices,VarsToExclude,Dim)
 %  Struct        - the struct to operate on
 %  SubSetIndices - the list of indices to select from each field
 %  VarsToExclude - fields to ignore when subsettings
-%  Dim           - the dimension to operate on for each field
+%  Dim           - the dimension to operate on for each field. If 0, wil apply to whole dataset
 %
 %outputs:
 %  Struct        - the  reduced structure
@@ -33,7 +33,9 @@ for iField=1:1:numel(Fields);
 
   %reduce desired variables
   F = Struct.(Fields{iField});
-  F = index_dim(F,SubSetIndices,Dim);
+  if Dim == 0; F = index_dim(F(:),SubSetIndices,1);
+  else         F = index_dim(F,SubSetIndices,Dim);
+  end
   Struct.(Fields{iField}) = F;
   
   %done!
