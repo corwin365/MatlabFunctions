@@ -183,7 +183,7 @@ OutData.Tp     = OutData.A;
 
 %some approaches require two adjacent profiles to be computed. To avoid duplicate computation,
 %this is marginally more efficient if we work backwards and store the next profile for this case.
-textprogressbar('--> Computing  gravity waves ')
+textprogressbar('--> Computing   gravity waves ')
 for iProf=NProfiles:-1:1
 
   %compute ST
@@ -203,8 +203,8 @@ for iProf=NProfiles:-1:1
 
     OutData.A(  iProf,:) = ThisST.A;
     OutData.Lz( iProf,:) = 1./ThisST.F1;
-    OutData.Lat(iProf,:) = Data.Lat(iProf,:),
-    OutData.Lon(iProf,:) = Data.Lon(iProf,:),
+    OutData.Lat(iProf,:) = Data.Lat(iProf,:);
+    OutData.Lon(iProf,:) = Data.Lon(iProf,:);
     OutData.Alt(iProf,:) = Data.Alt(iProf,:);
     OutData.Tp( iProf,:) = Data.Tp(iProf,:);
 
@@ -228,7 +228,7 @@ for iProf=NProfiles:-1:1
     dx   = nph_haversine([Data.Lat(iProf,  :);Data.Lon(iProf,  :)]',[Data.Lat(iProf+1,:);Data.Lon(iProf+1,:)]');
     dPhi = NaN(size(Lz)); for iLev=1:1:size(Data.Alt,2); dPhi(iLev) = CoSpectrum(idx(iLev),iLev); end
     dPhi = atan(imag(dPhi)./real(dPhi))./(2.*pi);
-    Lh = dx./dPhi';
+    Lh = abs(dx./dPhi');
 
     %adjust lat/lon to the midpoint of the profile-pair
     [latmean,lonmean] = meanm(Data.Lat(iProf+[0,1],:), ...

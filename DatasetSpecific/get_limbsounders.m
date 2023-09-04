@@ -225,6 +225,29 @@ switch Input.Instrument
       Store.Time = repmat(Store.Time, [1,size(Store.Temp,2)]);
       Store.Pres = repmat(Store.Pres',[size(Store.Temp,1),1]);
 
+
+      %HIRDLS stores geolocation at the 30km level, but travels while scanning up and down
+      %see Wright et al (ACP, 2015) for the logic of what we're going to do here to reverse
+      %this choice and get 'true' lat and lon values
+
+      %find the 30km level
+      [~,zidx] = min(abs(nanmean(Store.Alt,1)-30));
+
+      %for each profile compute the directional azimuth
+      Theta = azimuth(Store.Lat(1:end-1,zidx),Store.Lon(1:end-1,zidx), ...
+                      Store.Lat(2:end,  zidx),Store.Lon(2:end,  zidx),'degrees');      
+      Theta(end+1) = Theta(end); %close enough for last point
+
+      %hence find the true(ish) location of each point in 2D space
+      KmAlongtrackPerKmVertical = 0.6;
+      dx = Store.Lat.*NaN;
+      for iLev=1:1:size(Store.Lat,2)
+        dx(:,iLev) =  KmAlongtrackPerKmVertical.*(iLev-zidx);
+        [Store.Lat(:,iLev),Store.Lon(:,iLev)] = reckon(Store.Lat(:,zidx),Store.Lon(:,zidx),km2deg(dx(:,iLev)),Theta);  
+      end
+
+      clear zidx Theta KmAlongtrackPerKmVertical dx iLev
+
       %store in main repository
       Data = cat_struct(Data,Store,1);
 
