@@ -95,12 +95,16 @@ VGrid   = zeros(size(VarGrid));        %sum of planetary waves at each point
 for iPW=0:1:NPWs
   for iLine =1:1:size(VarGrid,2)
 
+    if nansum(VarGrid(:,iLine)) == 0; continue; end %not enough data to pass percentage check above
+
     if iPW==0;
       %take and repmat zonal mean
       yfit = repmat(nanmean(VarGrid(:,iLine)),[size(VarGrid,1),1]);
     else
       %fit PW
+      warning off
       yfit = nph_sinefit(LonAxis,VarGrid(:,iLine),360./iPW);
+      warning on
     end
 
     %remove from the data so we don't do so again

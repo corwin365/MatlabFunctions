@@ -1,4 +1,4 @@
-function [OutData,PWs] = limb_gws(Data,varargin)
+function [OutData,PW] = limb_gws(Data,varargin)
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -24,11 +24,11 @@ function [OutData,PWs] = limb_gws(Data,varargin)
 %
 %if Filter is set to 'PW', then the following options can be used:
 %
-%    NPWs            (integer,              6)  number of PWs to fit (plus zonal mean)
+%    NPWs            (integer,              3)  number of PWs to fit (plus zonal mean)
 %    PWWindow        (positive real,        1)  number of days to use in each PW fit
 %    PWTimeRes       (positive real,        1)  time resolution to export PW fits on
 %    PWLonGrid       (vector      -180:20:180)  longitude grid to compute PWs on
-%    PWMinPC         (positive real,     0.66)  fraction of longitude bins which must be filled for each lat band
+%    PWMinPC         (positive real,       66)  fraction of longitude bins which must be filled for each lat band
 %    PWLatGrid       (vector         -90:5:90)  longitude grid to compute PWs on
 %    PWAltGrid       (vector, input grid mean)  altitude grid to compute PWs on
 %
@@ -56,8 +56,7 @@ p = inputParser;
 addRequired(p,'Data',@isstruct); %input data must be a struct. Will be hand-parsed later.
 
 %analysis to use
-CheckAnalysis = @(x) validateattributes(x,{'numeric'},{'integer','<=',2}); 
-addParameter(p,'Analysis', 1,CheckAnalysis) %type of analysis to use (see above)
+addParameter(p,'Analysis',1,@(x) validateattributes(x,{'numeric'},{'integer','<=',2})) %type of analysis to use (see above)
 
 %filter to use
 addParameter(p,'Filter','PW',@ischar) %type of filter to use
@@ -68,13 +67,13 @@ addParameter(p,'STc',                       0.25,@ispositive) %'c' parameter for
 
 
 %additional variables - planetary waves
-addParameter(p,      'NPWs',                  6,@isinteger ) %number of planetary waves to fit
-addParameter(p,   'PWMinPC',               0.66,@ispositive) %fraction of longitude bins that must be filled
-addParameter(p,  'PWWindow',                  1,@ispositive) %window width of period used
-addParameter(p, 'PWTimeRes',                  1,@ispositive) %time resolution
-addParameter(p, 'PWLonGrid',        -180:20:180,@isvector  ) %longitude bins
-addParameter(p, 'PWLatGrid',           -90:5:90,@isvector  ) %latitude bins
-addParameter(p, 'PWAltGrid',nanmean(Data.Alt,1),@isvector  ) %altitude bins
+addParameter(p,      'NPWs',                  3,@isinteger ) %number of planetary waves to fit
+addParameter(p,   'PWMinPC',                 66,@(x) validateattributes(x,{'numeric'},{'>',0})) %fraction of longitude bins that must be filled
+addParameter(p,  'PWWindow',                  1,@(x) validateattributes(x,{'numeric'},{'>',0})) %window width of period used, in days
+addParameter(p, 'PWTimeRes',                  1,@(x) validateattributes(x,{'numeric'},{'>',0})) %time resolution
+addParameter(p, 'PWLonGrid',        -180:20:180,@(x) validateattributes(x,{'numeric'},{'>=',-180,'<=',180,'vector'})) %longitude bins
+addParameter(p, 'PWLatGrid',           -90:5:90,@(x) validateattributes(x,{'numeric'},{'>=', -90,'<=', 90,'vector'})) %latitude bins
+addParameter(p, 'PWAltGrid',nanmean(Data.Alt,1),@(x) validateattributes(x,{'numeric'},{'>=',   0,         'vector'})) %altitude bins
 
 
 
@@ -84,9 +83,17 @@ addParameter(p, 'PWAltGrid',nanmean(Data.Alt,1),@isvector  ) %altitude bins
 %parse inputs
 parse(p,Data,varargin{:})
 
-%check contents of input data struct. 
-disp('Currently no checks on contents of Data struct, fix this!')
-disp('need to check that altitudes monotonically increase and are non-NaN')
+%check contents of input data struct:. 
+  %%do we have at least Lat, Lon, Temp, Alt? These are what we use
+if ~isfield(Data,'Lat') ||  ~isfield(Data,'Lon') || ~isfield(Data,'Alt') || ~isfield(Data,'Temp');
+  error('Missing field - struct must contain Lat, Lon, Alt and Temp fields.')
+  return
+end
+  %%are these fields all the same size?
+if ~isequal(size(Data.Lat),size(Data.Lon)) ||  ~isequal(size(Data.Lat),size(Data.Alt)) || ~isequal(size(Data.Lat),size(Data.Temp));
+  error('LAt, Lon, Alt and Temp fields must all be the same size.')
+  return
+end
 
 
 %pull out the remaining arguments into struct "Inputs", used throughout rest of routine

@@ -22,6 +22,8 @@ function Data =  get_limbsounders(TimeRange,Instrument,varargin)
 %    HeightScale     (numeric,        0:1:100)  heightscale to interpolate the data onto, in km
 %    AdditionalVars  (cell,                {})  list of additional variables to extract, if available  
 %    OriginalZ       (logical,          false)  return data on original vertical grid
+%    KeepOutliers    (logical,          false)  don't remove outliers from the data. NOTE THAT BY DEFAULT THEY WILL BE.
+%
 %
 %
 %outputs:
@@ -82,8 +84,10 @@ CheckHeights = @(x) validateattributes(x,{'numeric'},{'>=',0});
 addParameter(p,'HeightScale',0:1:100,CheckHeights)
 
 %additional variables
-addParameter(p,'AdditionalVars',{},@iscell)
-addParameter(p,'OriginalZ',false,@islogical)
+addParameter(p,'AdditionalVars',   {},@iscell)
+addParameter(p,     'OriginalZ',false,@islogical)
+addParameter(p,  'KeepOutliers',false,@islogical)
+
 
 %parse inputs and tidy up
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -429,17 +433,42 @@ Data.Lon(Data.Lon > 180) = Data.Lon(Data.Lon > 180)-360;
 %% postprocessing based on input options
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-%(currently no options to do this)
+%remove outliers?
+%%%%%%%%%%%%%%%%%%
 
+if Input.KeepOutliers == 0;
 
+  %create one big array of badness, then remove from ALL variables in one pass
+  Bad = [];
 
+  %latitude and longitude have physical limits
+  Bad = [Bad;find(Data.Lat <  -90 | Data.Lat >  90 | Data.Lon < -180 | Data.Lon > 180)];
+  
+  %time and altitude should always be in the specified range
+  Bad = [Bad;find(Data.Time < min(Input.TimeRange  ) | Data.Time > max(Input.TimeRange  ))];
+  Bad = [Bad;find(Data.Alt  < min(Input.HeightScale) | Data.Alt  > max(Input.HeightScale))];
 
+  %temperature should be >100K always, and  <400K at altitudes below the mesopause 
+  Bad = [Bad;find(Data.Temp < 100)];
+  Bad = [Bad;find(Data.Temp > 400 & Data.Alt < 100)];
 
+  
+  %do it
+  Bad = unique(Bad);
+  Fields = fieldnames(Data);
+  for iF=1:1:numel(Fields)
+    F = Data.(Fields{iF});
+    F(Bad) = NaN;
+    Data.(Fields{iF}) = F;
+  end
 
+  clear Bad Fields F iF
 end
 
 
 
+%end of programme
+end
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% function to validate list of allowed instruments
