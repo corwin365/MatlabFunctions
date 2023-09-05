@@ -64,6 +64,11 @@ clear p
 InSize = size(Lon);
 Lon = Lon(:); Lat = Lat(:); Alt = Alt(:); Var = Var(:);
 
+%fill gaps in altgrid (these arise from interaction of get_limbsounders() and heights
+%where we have no data, the 'levels' produced will have no data to fill anyway so this
+%has no effect on the final results
+AltGrid = inpaint_nans(AltGrid);
+
 %create output meshgrids
 [LonGrid,LatGrid,AltGrid] = meshgrid(LonGrid,LatGrid,AltGrid);
 

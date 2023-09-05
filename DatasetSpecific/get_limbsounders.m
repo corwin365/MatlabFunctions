@@ -19,10 +19,11 @@ function Data =  get_limbsounders(TimeRange,Instrument,varargin)
 %
 %    VarName         (type,           default)  description
 %    -----------------------------------------------------------------------------
-%    HeightScale     (numeric,        0:1:100)  heightscale to interpolate the data onto, in km
 %    AdditionalVars  (cell,                {})  list of additional variables to extract, if available  
 %    OriginalZ       (logical,          false)  return data on original vertical grid
 %    KeepOutliers    (logical,          false)  don't remove outliers from the data. NOTE THAT BY DEFAULT THEY WILL BE.
+%    HeightScale     (numeric,        0:1:100)  heightscale to interpolate the data onto, in km
+%    HeightRange     (numeric,      [0,99e99])  height range to clip data to. Combines with HeightScale, but is more useful with OriginalZ.
 %
 %
 %
@@ -79,9 +80,11 @@ CheckInst  = @(x) validateStringParameter(x,fieldnames(InstInfo),mfilename,Instr
 addRequired(p,'Instrument',CheckInst)
 
 
-%height range
+%height range and height scale
 CheckHeights = @(x) validateattributes(x,{'numeric'},{'>=',0}); 
-addParameter(p,'HeightScale',0:1:100,CheckHeights)
+addParameter(p,'HeightScale',  0:1:100,CheckHeights)
+addParameter(p,'HeightRange',[0,99e99],CheckHeights)
+
 
 %additional variables
 addParameter(p,'AdditionalVars',   {},@iscell)
@@ -447,6 +450,7 @@ if Input.KeepOutliers == 0;
   %time and altitude should always be in the specified range
   Bad = [Bad;find(Data.Time < min(Input.TimeRange  ) | Data.Time > max(Input.TimeRange  ))];
   Bad = [Bad;find(Data.Alt  < min(Input.HeightScale) | Data.Alt  > max(Input.HeightScale))];
+  Bad = [Bad;find(Data.Alt  < min(Input.HeightRange) | Data.Alt  > max(Input.HeightRange))];
 
   %temperature should be >100K always, and  <400K at altitudes below the mesopause 
   Bad = [Bad;find(Data.Temp < 100)];
