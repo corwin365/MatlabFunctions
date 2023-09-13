@@ -10,7 +10,8 @@ function Data =  get_limbsounders(TimeRange,Instrument,varargin)
 %Corwin Wright, c.wright@bath.ac.uk, 2023/08/15
 %
 %changes:
-%  2023/09/13 added ACE-FTS as an option
+%  2023/09/13 added ACE-FTS as a valid instrument
+%  2023/09/13 added ability to select profiles by lat/lon
 %
 %
 %
@@ -29,7 +30,8 @@ function Data =  get_limbsounders(TimeRange,Instrument,varargin)
 %    KeepOutliers    (logical,          false)  don't remove outliers from the data. NOTE THAT BY DEFAULT THEY WILL BE REMOVED.
 %    HeightScale     (numeric,      18:0.5:60)  heightscale to interpolate the data onto, in km, if OriginalZ is not set
 %    HeightRange     (numeric,      [0,99e99])  height range to clip data to. Combines with HeightScale, but is more useful with OriginalZ.
-%
+%    LatRange        (numeric,       [-90,90])  latitude  range to select. Maximally permissive - allows profiles which enter the box at any height.
+%    LonRange        (numeric,     [-180,180])  longitude range to select. Also maximally permissive.
 %
 %
 %outputs:
@@ -70,7 +72,6 @@ InstInfo.SABER.HeightRange = [0,120];
 InstInfo.SABER.Path        = [LocalDataDir,'/SABER/rawnc-v2/'];
 
 
-
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% input parsing
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -90,12 +91,14 @@ addRequired(p,'TimeRange',CheckDates); %time range
 CheckInst  = @(x) validateStringParameter(x,fieldnames(InstInfo),mfilename,Instrument);
 addRequired(p,'Instrument',CheckInst)
 
-
 %height range and height scale
 CheckHeights = @(x) validateattributes(x,{'numeric'},{'>=',0}); 
 addParameter(p,'HeightScale',18:0.5:60,CheckHeights)
 addParameter(p,'HeightRange',[0,99e99],CheckHeights)
 
+%latrange and lonrange
+addParameter(p,'LatRange',[ -90, 90],@(x) validateattributes(x,{'numeric'},{'>=', -90,'<=', 90}))
+addParameter(p,'LonRange',[-180,180],@(x) validateattributes(x,{'numeric'},{'>=',-180,'<=',180}))
 
 %additional variables
 addParameter(p,'AdditionalVars',   {},@iscell)
@@ -493,9 +496,33 @@ if Input.KeepOutliers == 0;
 end
 
 
+%latitude and longitude filtering?
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+if min(Input.LatRange) ~=  -90 || max(Input.LatRange) ~=  90 ...
+ | min(Input.LonRange) ~= -180 || max(Input.LonRange) ~= 180
+
+  %find the min and max of lon and lat for each profile
+  Limits = [min(Data.Lon,[],2),max(Data.Lon,[],2), ...
+            min(Data.Lat,[],2),max(Data.Lat,[],2)];
+
+  %generate a list of profiles where any point falls inside the limits
+  Bad = [];
+  Bad = [Bad;find(Limits(:,1) > max(Input.LonRange))];
+  Bad = [Bad;find(Limits(:,2) < min(Input.LonRange))];
+  Bad = [Bad;find(Limits(:,3) > max(Input.LatRange))];
+  Bad = [Bad;find(Limits(:,4) < min(Input.LatRange))];
+
+  Good = 1:1:size(Limits,1); Good(Bad) = [];
+  Data = reduce_struct(Data,Good,[],1);
+
+end
+
+
 
 %end of programme
 end
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% function to validate list of allowed instruments
