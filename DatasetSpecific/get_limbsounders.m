@@ -43,6 +43,7 @@ function Data =  get_limbsounders(TimeRange,Instrument,varargin)
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 %ACE-FTS
+%only currently loads temperature and pressure, as generated from GLC data
 InstInfo.ACE.TimeRange      = [datenum(2004,1,35),datenum(9999,999,999)]; %still running at time of writing
 InstInfo.ACE.HeightRange    = [18,125]; %data are available outside this range but are entirely a priori
 InstInfo.ACE.Path           = [LocalDataDir,'/ACE/v5.2/'];
