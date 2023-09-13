@@ -20,9 +20,9 @@ function Data =  get_limbsounders(TimeRange,Instrument,varargin)
 %    VarName         (type,           default)  description
 %    -----------------------------------------------------------------------------
 %    AdditionalVars  (cell,                {})  list of additional variables to extract, if available  
-%    OriginalZ       (logical,          false)  return data on original vertical grid
-%    KeepOutliers    (logical,          false)  don't remove outliers from the data. NOTE THAT BY DEFAULT THEY WILL BE.
-%    HeightScale     (numeric,        0:1:100)  heightscale to interpolate the data onto, in km
+%    OriginalZ       (logical,          false)  return data on original vertical grid rather than interpolated to common scale.
+%    KeepOutliers    (logical,          false)  don't remove outliers from the data. NOTE THAT BY DEFAULT THEY WILL BE REMOVED.
+%    HeightScale     (numeric,      18:0.5:60)  heightscale to interpolate the data onto, in km, if OriginalZ is not set
 %    HeightRange     (numeric,      [0,99e99])  height range to clip data to. Combines with HeightScale, but is more useful with OriginalZ.
 %
 %
@@ -37,6 +37,11 @@ function Data =  get_limbsounders(TimeRange,Instrument,varargin)
 % instruments we can use this on, and their properties
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
+%ACE-FTS
+InstInfo.ACE.TimeRange      = [datenum(2004,1,1),datenum(9999,999,999)]; %still running at time of writing
+InstInfo.ACE.HeightRange    = [18,125]; %data are available outside this range but are entirely a priori
+InstInfo.ACE.Path           = [LocalDataDir,'/ACE/v5.2/'];
+
 %GNSS
 InstInfo.GNSS.TimeRange     = [datenum(2002,1,1),datenum(9999,999,999)]; %still running at time of writing
 InstInfo.GNSS.HeightRange   = [0,40];
@@ -49,9 +54,9 @@ InstInfo.HIRDLS.Path        = [LocalDataDir,'/HIRDLS'];
 
 %MLS
 %only currently loads temperature files, due to the way I have them stored
-InstInfo.MLS.TimeRange   = [datenum(2004,1,275),datenum(9999,999,999)]; %still running at time of writing
-InstInfo.MLS.HeightRange = [0,100];
-InstInfo.MLS.Path        = [LocalDataDir,'/MLS/T/'];
+InstInfo.MLS.TimeRange      = [datenum(2004,1,275),datenum(9999,999,999)]; %still running at time of writing
+InstInfo.MLS.HeightRange    = [0,100];
+InstInfo.MLS.Path           = [LocalDataDir,'/MLS/T/'];
 
 %SABER
 InstInfo.SABER.TimeRange   = [datenum(2002,1,1),datenum(9999,999,999)];
@@ -72,7 +77,7 @@ p = inputParser;
 %%%%%%%%%%%%%%%%%%%%%%
 
 %date
-CheckDates  = @(x) validateattributes(x,{'numeric'},{'>=',datenum(1979,1,1)});
+CheckDates  = @(x) validateattributes(x,{'numeric'},{'>=',datenum(1979,1,1)}); %must be in the satellite era
 addRequired(p,'TimeRange',CheckDates); %time range
 
 %instrument(s)
@@ -82,7 +87,7 @@ addRequired(p,'Instrument',CheckInst)
 
 %height range and height scale
 CheckHeights = @(x) validateattributes(x,{'numeric'},{'>=',0}); 
-addParameter(p,'HeightScale',  0:1:100,CheckHeights)
+addParameter(p,'HeightScale',18:0.5:60,CheckHeights)
 addParameter(p,'HeightRange',[0,99e99],CheckHeights)
 
 
@@ -100,7 +105,7 @@ parse(p,TimeRange,Instrument,varargin{:})
 
 %additional check on dates - must be either a single value (a day to load all of) or two values (start and end time)
 if     numel(TimeRange)  > 2;  error('TimeRange must be either one value (a day of interest) or two values (a time range)');
-elseif numel(TimeRange) == 1; TimeRange = [floor(TimeRange),floor(TimeRange)+1-1e-8]; end % strictly the latter bound is 1ms less than a day
+elseif numel(TimeRange) == 1; TimeRange = [floor(TimeRange),floor(TimeRange)+1-1e-8]; end % strictly the latter bound is very slight less than a day...
 
 %additional check on dates - must be in valid range for instrument
 if   min(TimeRange) > InstInfo.(Instrument).TimeRange(2) ...
@@ -114,7 +119,7 @@ Input = p.Results;
 Input.TimeRange = TimeRange;
 clearvars -except InstInfo Input
 
-%extract just the info for the instrument we want
+%extract just the metadata for the instrument we want
 InstInfo  = InstInfo.(Input.Instrument);
 
 
@@ -145,47 +150,59 @@ for iVar=1:1:numel(Vars); Data.(Vars{iVar}) = []; end
 
 switch Input.Instrument
 
-
-  case 'GNSS'
+  case {'ACE','GNSS'}
 
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    % merged GNSS product
+    %ACE-FTS v5 and GNSS have very similar file formats, because I
+    %made the formats we store them in.
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
     for DayNumber=floor(min(Input.TimeRange)):1:floor(max(Input.TimeRange));
 
       %work out year and day number and hence filepath
       [y,~,~] = datevec(DayNumber); dn = date2doy(DayNumber);
-      File = [InstInfo.Path,'/',sprintf('%04d',y),'/merged_ro_',sprintf('%04d',y),'_',sprintf('%03d',dn),'.mat'];
+      switch Input.Instrument
+        case 'GNSS'; File = [InstInfo.Path,'/',sprintf('%04d',y),'/merged_ro_',sprintf('%04d',y),'_',sprintf('%03d',dn),'.mat'];
+        case  'ACE'; File = [InstInfo.Path,'/',sprintf('%04d',y),'/ace_v52_',  sprintf('%04d',y),'d',sprintf('%03d',dn),'.mat'];
+      end
       if ~exist(File,'file'); clear y dn File; continue; end
 
       %load the data
-      GNSS = load(File);
+      InstData = load(File);
       clear y dn File
 
       %get the variables we want
       Store = struct();
-
       for iVar=1:1:numel(Vars)
 
-        if ~strcmp(Vars{iVar},'Alt') & ~strcmp(Vars{iVar},'Time') & ~strcmp(fieldnames(GNSS),Vars{iVar});
+        if ~strcmp(Vars{iVar},'Alt')  ...
+         & ~strcmp(Vars{iVar},'Time') ...
+         & ~strcmp(fieldnames(InstData),Vars{iVar});
           disp(['Variable ',Vars{iVar},' not found, terminating'])
           return
         end
 
         switch Vars{iVar}
-          case 'Time'; Store.Time = repmat(GNSS.MetaData.time,[1,size(GNSS.Lat,2)]);
-          case 'Alt';  Store.Alt  = repmat(GNSS.MSL_alt,[size(GNSS.Lat,1),1]);
-          otherwise;   Store.(Vars{iVar}) = GNSS.(Vars{iVar});
+          case 'Time'; 
+            switch Input.Instrument
+              case 'GNSS'; Store.Time = repmat(InstData.MetaData.time,[1,size(InstData.Lat,2)]);
+              case 'ACE';  Store.Time = InstData.Time;
+            end
+          case 'Alt'; 
+            switch Input.Instrument
+              case 'GNSS'; Store.Alt  = repmat(InstData.MSL_alt,[size(InstData.Lat,1),1]);
+              case 'ACE';  Store.Alt = InstData.Alt;            
+            end
+          otherwise;   Store.(Vars{iVar}) = InstData.(Vars{iVar});
         end
 
       end; clear iVar
 
       %temporary fix for some anomalous prs values
-      disp('temporarily using alt > pres instead of pres')
-
-      Store.Pres = h2p(Store.Alt);
-
+      if strcmp(Input.Instrument,'GNSS')
+        disp('for GNSS, temporarily using alt > pres instead of pres')
+        Store.Pres = h2p(Store.Alt);
+      end
 
       %store in main repository
       Data = cat_struct(Data,Store,1);
