@@ -9,6 +9,11 @@ function Data =  get_limbsounders(TimeRange,Instrument,varargin)
 %
 %Corwin Wright, c.wright@bath.ac.uk, 2023/08/15
 %
+%changes:
+%  2023/09/13 added ACE-FTS as an option
+%
+%
+%
 %inputs:
 %  required:
 %    TimeRange [double] - time range, in Matlab units. Usually takes 2-element array
