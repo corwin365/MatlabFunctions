@@ -67,9 +67,14 @@ InstInfo.MLS.HeightRange    = [0,100];
 InstInfo.MLS.Path           = [LocalDataDir,'/MLS/T/'];
 
 %SABER
-InstInfo.SABER.TimeRange   = [datenum(2002,1,1),datenum(9999,999,999)];
+InstInfo.SABER.TimeRange   = [datenum(2002,1,1),datenum(9999,999,999)]; %still running at time of writing
 InstInfo.SABER.HeightRange = [0,120];
 InstInfo.SABER.Path        = [LocalDataDir,'/SABER/rawnc-v2/'];
+
+%SOFIE
+InstInfo.SOFIE.TimeRange   = [datenum(2007,1,135),datenum(9999,999,999)]; %still running at time of writing
+InstInfo.SOFIE.HeightRange = [20,100]; %this is the range of the mission time/height cross-sections on their website
+InstInfo.SOFIE.Path        = [LocalDataDir,'/SOFIE/'];
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -162,7 +167,7 @@ switch Input.Instrument
   case {'ACE','GNSS'}
 
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    %ACE-FTS v5 and GNSS have very similar file formats, because I
+    %% ACE-FTS v5 and GNSS have very similar file formats, because I
     %made the formats we store them in.
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -223,7 +228,7 @@ switch Input.Instrument
   case 'HIRDLS'
 
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    % HIRDLS
+    %% HIRDLS
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
     for DayNumber=floor(min(Input.TimeRange)):1:floor(max(Input.TimeRange));
@@ -288,7 +293,7 @@ switch Input.Instrument
   case 'MLS'
 
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    % MLS
+    %% MLS
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
     for DayNumber=floor(min(Input.TimeRange)):1:floor(max(Input.TimeRange));
@@ -339,11 +344,12 @@ switch Input.Instrument
 
     end; clear DayNumber
 
-    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    % SABER
-    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
   case 'SABER';
+
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    %% SABER
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%    
 
     %monthly files, ugh
     OldData.Data = struct();
@@ -403,10 +409,58 @@ switch Input.Instrument
 
     end; clear  dn id iEl iVar OldData s Store year working
 
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    %% SOFIE
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+  case 'SOFIE';
+    for DayNumber=floor(min(Input.TimeRange)):1:floor(max(Input.TimeRange));
+      %work out year and day number and hence filepath
+      [y,~,~] = datevec(DayNumber); dn = date2doy(DayNumber);
+      File = wildcardsearch(InstInfo.Path,['Level2_',sprintf('%04d',y),sprintf('%03d',dn)]);
+      if numel(File) == 0; clear y dn File;continue; end
+
+      %load file
+      Working = rCDF(File{1});
+      
+
+      %get variables
+      Store = struct();
+      for iVar=1:1:numel(Vars)
+        switch Vars{iVar}
+          case 'Temp'; Store.Temp  = Working.Temperature';
+          case 'Lat';  Store.Lat   = Working.Latitude_83km;
+          case 'Lon';  Store.Lon   = Working.Longitude_83km;
+          case 'Alt';  Store.Alt   = Working.Altitude';
+          case 'Pres'; Store.Pres  = Working.Pressure';
+          case 'Time'; Store.Time  = DayNumber+Working.Time_UT./24;
+          otherwise;  
+            try;   Store.(Vars{iVar}) = Working.(Vars{iVar}); 
+            catch; disp(['Variable ',Vars{iVar},' not found, terminating']); return
+            end
+        end      
+      end
+      clear iVar Working y dn
+
+      %reshape
+      NLevs = numel(Store.Alt); NProfs = numel(Store.Lat);
+      Store.Lat  = repmat(Store.Lat, 1,NLevs);
+      Store.Lon  = repmat(Store.Lon, 1,NLevs);
+      Store.Time = repmat(Store.Time,1,NLevs);
+      Store.Alt  = repmat(Store.Alt, NProfs,1);
+      clear NLevs NProfs
+
+
+      %store in main repository, and tidy
+      Data = cat_struct(Data,Store,1);
+
+
+
+    end; clear DayNumber
   otherwise
 
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    % invalid instrument!
+    %% invalid instrument!
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 
