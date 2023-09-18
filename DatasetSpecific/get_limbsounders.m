@@ -73,7 +73,7 @@ InstInfo.SABER.Path        = [LocalDataDir,'/SABER/rawnc-v2/'];
 
 %SOFIE
 InstInfo.SOFIE.TimeRange   = [datenum(2007,1,135),datenum(9999,999,999)]; %still running at time of writing
-InstInfo.SOFIE.HeightRange = [20,100]; %this is the range of the mission time/height cross-sections on their website
+InstInfo.SOFIE.HeightRange = [10,110]; %this is the range of the mission time/height cross-sections on their website
 InstInfo.SOFIE.Path        = [LocalDataDir,'/SOFIE/'];
 
 
