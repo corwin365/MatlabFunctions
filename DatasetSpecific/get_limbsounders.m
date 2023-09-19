@@ -60,6 +60,11 @@ InstInfo.HIRDLS.TimeRange   = [datenum(2005,1,29),datenum(2008,1,77)];
 InstInfo.HIRDLS.HeightRange = [0,80];
 InstInfo.HIRDLS.Path        = [LocalDataDir,'/HIRDLS'];
 
+%MIPAS
+InstInfo.MIPAS.TimeRange   = [datenum(2002,7,2),datenum(2012,4,8)];
+InstInfo.MIPAS.HeightRange = [0,80];
+InstInfo.MIPAS.Path        = [LocalDataDir,'/MIPAS'];
+
 %MLS
 %only currently loads temperature files, due to the way I have them stored
 InstInfo.MLS.TimeRange      = [datenum(2004,1,275),datenum(9999,999,999)]; %still running at time of writing
@@ -288,6 +293,53 @@ switch Input.Instrument
 
 
     end; clear DayNumber
+
+  case 'MIPAS'
+
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    %% MIPAS
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+    for DayNumber=floor(min(Input.TimeRange)):1:floor(max(Input.TimeRange));
+
+      %work out filepath
+      [y,m,d] = datevec(DayNumber); 
+      File = wildcardsearch(InstInfo.Path,['_',sprintf('%04d',y),sprintf('%02d',m),sprintf('%02d',d),'_nom']);
+      if numel(File) == 0; clear y dn File; continue; end
+
+      %load data and pull out vars
+      Working = rCDF(File{1});
+      
+      %get variables
+      Store = struct();
+      for iVar=1:1:numel(Vars)
+        switch Vars{iVar}
+          case 'Temp'; Store.Temp  = Working.TEM';
+          case 'Lat';  Store.Lat   = Working.latitude;
+          case 'Lon';  Store.Lon   = Working.longitude;
+          case 'Alt';  Store.Alt   = Working.hgt';
+          case 'Pres'; Store.Pres  = Working.PRE';
+          case 'Time'; Store.Time  = DayNumber+Working.time./24;
+          otherwise;  
+            try;   Store.(Vars{iVar}) = Working.(Vars{iVar}); 
+            catch; disp(['Variable ',Vars{iVar},' not found, terminating']); return
+            end
+        end      
+      end
+      clear iVar Working y dn
+
+      %reshape
+      NLevs = size(Store.Alt,2); NProfs = numel(Store.Lat);
+      Store.Lat  = repmat(Store.Lat, 1,NLevs);
+      Store.Lon  = repmat(Store.Lon, 1,NLevs);
+      Store.Time = repmat(Store.Time,1,NLevs);
+      clear NLevs NProfs
+
+
+      %store in main repository
+      Data = cat_struct(Data,Store,1);
+
+    end; clear DayNimber
 
 
   case 'MLS'
