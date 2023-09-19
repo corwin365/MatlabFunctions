@@ -7,12 +7,15 @@ function Data =  get_limbsounders(TimeRange,Instrument,varargin)
 %loads a specific set of instruments in the formats I store them, so
 %may not work on your system!
 %
+%Note that the guts of the programme is a large number of individual
+%instrument cases, so it may be tricky to read
+%
 %Corwin Wright, c.wright@bath.ac.uk, 2023/08/15
 %
 %changes:
 %  2023/09/13 added ACE-FTS as a valid instrument
 %  2023/09/13 added ability to select profiles by lat/lon
-%
+%  2023/09/19 added MIPAS and SOFIE.
 %
 %
 %inputs:
