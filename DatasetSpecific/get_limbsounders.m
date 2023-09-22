@@ -179,6 +179,12 @@ switch Input.Instrument
     %made the formats we store them in.
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
+    %temporary fix for some anomalous prs values
+    if strcmp(Input.Instrument,'GNSS')
+      warning('for GNSS, temporarily using alt -> pres instead of pres due to bad stored data')
+    end
+
+
     for DayNumber=floor(min(Input.TimeRange)):1:floor(max(Input.TimeRange));
 
       %work out year and day number and hence filepath
@@ -220,11 +226,10 @@ switch Input.Instrument
 
       end; clear iVar
 
-      %temporary fix for some anomalous prs values
-      if strcmp(Input.Instrument,'GNSS')
-        disp('for GNSS, temporarily using alt > pres instead of pres')
-        Store.Pres = h2p(Store.Alt);
-      end
+    %temporary fix for some anomalous prs values
+    if strcmp(Input.Instrument,'GNSS')
+      Store.Pres = h2p(Store.Alt);
+    end
 
       %store in main repository
       Data = cat_struct(Data,Store,1);
