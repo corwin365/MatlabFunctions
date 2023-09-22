@@ -4,15 +4,13 @@ function LocalDataDir = LocalDataDir()
 TheComputerThisIsOn = upper(char(java.net.InetAddress.getLocalHost.getHostName));
 
 %set data directory path
-if strcmp(TheComputerThisIsOn,'DESKTOP-RNCK39U') | strcmp(TheComputerThisIsOn,'BETTERAVE') == 1;
+if strcmp(TheComputerThisIsOn,'BETTERAVE'); %Corwin's 2023 XPS13
   LocalDataDir = 'C:\Data\';
-elseif strcmp(TheComputerThisIsOn,'MYRTILLE') == 1 
- LocalDataDir = 'D:\Data\';  
-elseif strcmp(TheComputerThisIsOn(1:4),'ITD-') == 1 || strcmp(TheComputerThisIsOn(1:5),'NODE-') == 1
-  LocalDataDir = '/home/f/cw785/scratch/Data/';
-elseif isunix 
+elseif strcmpi(TheComputerThisIsOn,'neils-macbook-pro')
+  LocalDataDir = '/Users/neil/Data/'
+elseif isunix %assume Bath Uni filesystem
   LocalDataDir = '/u/f/cw785/Data/';
-else
+else %assume Bath Uni filesystem
   LocalDataDir = 'Z:\Data\';
 end
 
