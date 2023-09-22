@@ -56,7 +56,7 @@ InstInfo.ACE.Path           = [LocalDataDir,'/ACE/v5.2/'];
 %GNSS
 InstInfo.GNSS.TimeRange     = [datenum(2002,1,1),datenum(9999,999,999)]; %still running at time of writing
 InstInfo.GNSS.HeightRange   = [0,40];
-InstInfo.GNSS.Path          = [LocalDataDir,'/GNSS'];
+InstInfo.GNSS.Path          = [LocalDataDir,'/GNSS-RO/'];
 
 %HIRDLS
 InstInfo.HIRDLS.TimeRange   = [datenum(2005,1,29),datenum(2008,1,77)];
