@@ -15,9 +15,13 @@ elseif strcmpi(TheComputerThisIsOn,'neils-macbook-pro')
 elseif isunix %assume Bath Uni filesystem
   if     strcmp(TheUser,'cw785'); LocalDataDir = '/u/f/cw785/Data/';
   elseif strcmp(TheUser,'nh351'); LocalDataDir = '/u/f/nh351/Data/';    
+  else
+    LocalDataDir = '/';
+    warning('Unix system for whom LocalDataDir is not configured')
   end
 else %assume Bath Uni filesystem
-  LocalDataDir = 'Z:\Data\';
+  warning('Non-unix system for whom LocalDataDir is not configured')
+  LocalDataDir = 'C:\Data\';
 end
 
 
