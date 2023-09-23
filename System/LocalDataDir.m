@@ -8,20 +8,20 @@ TheUser = char(java.lang.System.getProperty('user.name'));
 
 
 %set data directory path
-if strcmp(TheComputerThisIsOn,'BETTERAVE'); %Corwin's 2023 XPS13
+if strcmp(TheComputerThisIsOn,'BETTERAVE') | strcmpi(TheComputerThisIsOn,'PASTEQUE') %Corwin's windows systems
   LocalDataDir = 'C:\Data\';
-elseif strcmpi(TheComputerThisIsOn,'neils-macbook-pro')
+elseif strcmpi(TheComputerThisIsOn,'neils-macbook-pro') %Neil's laptop
   LocalDataDir = '/Users/neil/data/';
-elseif isunix %assume Bath Uni filesystem
-  if     strcmp(TheUser,'cw785'); LocalDataDir = '/u/f/cw785/Data/';
-  elseif strcmp(TheUser,'nh351'); LocalDataDir = '/u/f/nh351/Data/';    
+elseif isunix 
+  if     strcmp(TheUser,'cw785'); LocalDataDir = '/u/f/cw785/Data/';  %Corwin on Bath system
+  elseif strcmp(TheUser,'nh351'); LocalDataDir = '/u/f/nh351/Data/';  %Neil on Bath system    
   else
-    LocalDataDir = '/';
-    warning('Unix system for whom LocalDataDir is not configured')
+    warning('Unix system for whom LocalDataDir is not configured, guessing path')
+    LocalDataDir = '/';    
   end
-else %assume Bath Uni filesystem
-  warning('Non-unix system for whom LocalDataDir is not configured')
-  LocalDataDir = 'C:\Data\';
+else
+  warning('Non-unix system for whom LocalDataDir is not configured, guessing path')
+  LocalDataDir = 'C:\Data\'; %this is a guess
 end
 
 

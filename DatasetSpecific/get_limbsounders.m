@@ -21,7 +21,10 @@ function Data =  get_limbsounders(TimeRange,Instrument,varargin)
 %inputs:
 %  required:
 %    TimeRange [double] - time range, in Matlab units. Usually takes 2-element array
-%                         can also take one number, assumed to be a whole day
+%                         can also take one number, assumed to be a whole day. NOTE 
+%                         THAT IF YOU GIVE A RANGE IT TAKES IT LITERALLY, i.e. if you
+%                         request from datenum(2020,1,20) to datenum(2020,1,23) it will
+%                         end at the midnight at the BEGINNING of 23/1/2020, not the end
 %    Instrument [string] - instrument name to load, from specified list (see InstInfo struct below)
 %
 %  optional:
