@@ -69,6 +69,9 @@ Lon = Lon(:); Lat = Lat(:); Alt = Alt(:); Var = Var(:);
 %has no effect on the final results
 AltGrid = inpaint_nans(AltGrid);
 
+%make sure everything ascends monotonically
+LatGrid= sort(LatGrid,'asc'); LonGrid = sort(LonGrid,'asc'); AltGrid = sort(AltGrid,'asc');
+
 %create output meshgrids
 [LonGrid,LatGrid,AltGrid] = meshgrid(LonGrid,LatGrid,AltGrid);
 

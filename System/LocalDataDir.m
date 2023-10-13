@@ -8,10 +8,9 @@ TheUser = char(java.lang.System.getProperty('user.name'));
 
 
 %set data directory path
-if strcmp(TheComputerThisIsOn,'BETTERAVE') | strcmpi(TheComputerThisIsOn,'PASTEQUE') %Corwin's windows systems
-  LocalDataDir = 'C:\Data\';
-elseif strcmpi(TheComputerThisIsOn,'neils-macbook-pro') %Neil's laptop
-  LocalDataDir = '/Users/neil/data/';
+if     strcmpi(TheComputerThisIsOn,'BETTERAVE');         LocalDataDir = 'C:\Data\'; %Corwin's red laptop
+elseif strcmpi(TheComputerThisIsOn,'PASTEQUE');          LocalDataDir = 'D:\Data\'; %Corwin's legion desktop
+elseif strcmpi(TheComputerThisIsOn,'neils-macbook-pro'); LocalDataDir = '/Users/neil/data/'; %Neil's Macbook
 elseif isunix 
   if     strcmp(TheUser,'cw785'); LocalDataDir = '/u/f/cw785/Data/';  %Corwin on Bath system
   elseif strcmp(TheUser,'nh351'); LocalDataDir = '/u/f/nh351/Data/';  %Neil on Bath system    

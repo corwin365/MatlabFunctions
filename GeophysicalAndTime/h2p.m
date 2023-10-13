@@ -76,6 +76,9 @@ for i = 1:length(alt),
 
   end
 
+  %quick clause to deal wih NaNs
+  if isnan(z); p(i) = NaN; continue; end
+
 
 
   if z >= z0 && z < z1, % LAYER 0

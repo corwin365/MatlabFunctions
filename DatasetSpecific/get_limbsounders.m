@@ -15,7 +15,9 @@ function Data =  get_limbsounders(TimeRange,Instrument,varargin)
 %changes:
 %  2023/09/13 added ACE-FTS as a valid instrument
 %  2023/09/13 added ability to select profiles by lat/lon
-%  2023/09/19 added MIPAS and SOFIE.
+%  2023/09/19 added MIPAS and SOFIE
+%
+%
 %
 %
 %inputs:
@@ -546,6 +548,7 @@ end
 %do at profile level to avoid breaking profiles
 Data = reduce_struct(Data,inrange(nanmean(Data.Time,2),Input.TimeRange),[],1);
 
+
 if Input.OriginalZ == false
 
   %height scale
@@ -592,8 +595,7 @@ if Input.KeepOutliers == 0;
   
   %time and altitude should always be in the specified range
   Bad = [Bad;find(Data.Time < min(Input.TimeRange  ) | Data.Time > max(Input.TimeRange  ))];
-  Bad = [Bad;find(Data.Alt  < min(Input.HeightScale) | Data.Alt  > max(Input.HeightScale))];
-  Bad = [Bad;find(Data.Alt  < min(Input.HeightRange) | Data.Alt  > max(Input.HeightRange))];
+  if Input.OriginalZ == false;  Bad = [Bad;find(Data.Alt  < min(Input.HeightScale) | Data.Alt  > max(Input.HeightScale))]; end
 
   %temperature should be >100K always, and  <400K at altitudes below the mesopause 
   Bad = [Bad;find(Data.Temp < 100)];
