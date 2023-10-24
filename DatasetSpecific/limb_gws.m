@@ -23,6 +23,8 @@ function [OutData,PW] = limb_gws(Data,varargin)
 %    STc             (positive real,     0.25)  value of 'c' to use in ST
 %    Analysis        (integer,              1)  type of analysis to use, from (1) 1DST, (2) Alexander et al 2008. 
 %    RegulariseZ     (logical            true)  ensure the data is on a regular height grid
+%    MindPhi         (positive real,     0.05)  minimum fractional phase change permitted for Alexander et al 2008 analysis 
+%    MaxdX           (positive real,      400)  maximum interprofile distance [km] permitted for Alexander et al 2008 analysis 
 %
 %
 %if Filter is set to 'Hindley23_ISSI', then the input 'Data' struct must contain
@@ -76,7 +78,13 @@ addParameter(p,'Filter','PWgrid',@ischar) %type of filter to use
 
 %ST properties
 addParameter(p,'STScales',1:1:size(Data.Alt,2)/2,@isvector  ) %scales to compute on ST
-addParameter(p,'STc',                       0.25,@ispositive) %'c' parameter for ST
+addParameter(p,'STc',                          1,@ispositive) %'c' parameter for ST
+
+%Alex08 horizontal wavelength properties
+addParameter(p,'MindPhi',0.05,@ispositive) %minimum fractional phase change to compute Lh
+addParameter(p,'MaxdX',   300,@ispositive) %maximum distance between profiles
+
+
 
 %interpolate to a regular height grid? (you probably want to keep this set to true - it checks if it's already true,
 %and only does the interpolation if needed)
@@ -217,16 +225,25 @@ for iProf=NProfiles:-1:1
     %compute cospectrum
     CoSpectrum = ThisST.ST .* conj(NextST.ST);
 
-    %find maximum amplitude and wavelength at each level
-    [A,idx] = max(abs(CoSpectrum),[],1);
-    A = sqrt(A);
-    Lz= 1./ThisST.freqs(idx);
+    %drop modal frequency
+    CoSpectrum(1,:) = NaN;
 
-    %find along-track distance between profiles, phase difference, and hence Lh
-    dx   = nph_haversine([Data.Lat(iProf,  :);Data.Lon(iProf,  :)]',[Data.Lat(iProf+1,:);Data.Lon(iProf+1,:)]');
-    dPhi = NaN(size(Lz)); for iLev=1:1:size(Data.Alt,2); dPhi(iLev) = CoSpectrum(idx(iLev),iLev); end
-    dPhi = atan(imag(dPhi)./real(dPhi))./(2.*pi);
+    %locate maximum at each height
+    [A,idx] = max(CoSpectrum,[],1,'omitnan');
+    A = sqrt(abs(A));
+
+    %find vertical waveLENGTHS
+    Lz = 1./ThisST.freqs(idx);
+
+    %find horizontal waveNUMBERS
+    dx = nph_haversine([Data.Lat(iProf,  :);Data.Lon(iProf,  :)]', ...
+                       [Data.Lat(iProf+1,:);Data.Lon(iProf+1,:)]');
+    dx(dx > Input.MaxdX) = NaN;
+    dPhi = angle(CoSpectrum(idx))./(2*pi);
+    dPhi(dPhi < Input.MindPhi) = NaN;
     Lh = abs(dx./dPhi');
+
+
 
     %compute MF
     MF = cjw_airdensity(Data.Pres(iProf,:),Data.Temp(iProf,:))  ...
