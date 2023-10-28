@@ -12,7 +12,7 @@ function [OutData,PW] = gwanalyse_limb(Data,varargin)
 %OUTPUTS:
 %
 %   OutData: struct containing the output fields, on a profile x height grid
-%     FailReason - reason why no data present (0: data present; 1: MaxdX or Maxdt exceeded; 2 -  MinFracInProf not met ; 3 maxdPhi exceeded; 4. input data was NaN )
+%     FailReason - reason why no data present (0: data present; 1: MaxdX or Maxdt exceeded; 2: MinFracInProf not met ; 3: MindPhi exceeded; 4. input data was NaN )
 %     A - amplitude (input units)
 %     Lz - vertical wavelength (km)
 %     Lh - horizontal wavelength (km)
@@ -58,7 +58,7 @@ function [OutData,PW] = gwanalyse_limb(Data,varargin)
 %
 %-----------------------------------
 %if 'Analysis' is set to 2, then the following options can be used:
-%    MindPhi         (positive real,     0.05)  minimum fractional phase change permitted for Alexander et al 2008 analysis 
+%    MindPhi         (positive real,    0.025)  minimum fractional phase change permitted for Alexander et al 2008 analysis 
 %    MaxdX           (positive real,      400)  maximum interprofile distance [km] permitted for Alexander et al 2008 analysis 
 %    Maxdt           (positive real,      900)  maximum interprofile time [s] permitted for Alexander et al 2008 analysis 
 %    MinFracInProf   (positive real,      0.5)  minimum fraction useful levels remaining in a profile after above two filters to proceed
@@ -114,7 +114,7 @@ addParameter(p,'STPadSize',                   20,@ispositive) %levels of zero-pa
 addParameter(p,'MaxdX',         300,@ispositive) %maximum distance between profiles
 addParameter(p,'Maxdt',         900,@ispositive) %maximum time between profiles
 addParameter(p,'MinFracInProf', 0.5,@ispositive) %maximum fraction of profile remaining after above filters
-addParameter(p,'MindPhi',       0.05,@ispositive) %minimum fractional phase change to compute Lh
+addParameter(p,'MindPhi',       0.025,@ispositive) %minimum fractional phase change to compute Lh
  
 
 
@@ -311,13 +311,15 @@ for iProf=NProfiles:-1:1
     %find vertical waveLENGTHS
     Lz = 1./ThisST.freqs(idx);
 
-    %find horizontal waveNUMBERS
+    %find phase change, and discard values where it's too small to be meaningful
     dx(dx > Settings.MaxdX) = NaN;
     dPhi = angle(CoSpectrum(idx))./(2*pi);
-    OutData.FailReason(iProf,dPhi < Settings.MindPhi) = 3; dPhi(dPhi < Settings.MindPhi) = NaN; 
-    Lh = abs(dx./dPhi);
 
-    %compute MF
+    OutData.FailReason(iProf,dPhi < Settings.MindPhi) = 3; 
+    dPhi(dPhi < Settings.MindPhi) = NaN; 
+
+    %compute Lh and MF
+    Lh = abs(dx./dPhi);
     MF = cjw_airdensity(Data.Pres(iProf,:),Data.Temp(iProf,:))  ...
       .* (Lz ./ Lh)                                            ...
       .* (9.81./0.02).^2                                        ...
