@@ -12,6 +12,7 @@ function [OutData,PW] = gwanalyse_limb(Data,varargin)
 %OUTPUTS:
 %
 %   OutData: struct containing the output fields, on a profile x height grid
+%     FailReason - reason why no data present (0: data present; 1: MaxdX or Maxdt exceeded; 2 -  MinFracInProf not met ; 3 maxdPhi exceeded; 4. input data was NaN )
 %     A - amplitude (input units)
 %     Lz - vertical wavelength (km)
 %     Lh - horizontal wavelength (km)
@@ -52,6 +53,7 @@ function [OutData,PW] = gwanalyse_limb(Data,varargin)
 %    Filter          (char,          'SGolay')  type of detrending filter to use (see below)
 %    STScales        (vector,   1:1:NLevels/2)  number of scales to use in 1D ST
 %    STc             (positive real,     0.25)  value of 'c' to use in ST
+%    STPadSize       (positive,            20)  levels of zero-padding to put at each end of the data before S-Transforming
 %    RegulariseZ     (logical            true)  interpolate the data to a regular height grid
 %
 %-----------------------------------
@@ -106,6 +108,7 @@ addParameter(p,'Filter','SGolay',@ischar) %type of filter to use
 %ST properties
 addParameter(p,'STScales',1:1:size(Data.Alt,2)/2,@isvector  ) %scales to compute on ST
 addParameter(p,'STc',                          1,@ispositive) %'c' parameter for ST
+addParameter(p,'STPadSize',                   20,@ispositive) %levels of zero-padding to put at each end of the data before S-Transforming
 
 %Alex08 horizontal wavelength properties
 addParameter(p,'MaxdX',         300,@ispositive) %maximum distance between profiles
@@ -212,21 +215,27 @@ if Settings.RegulariseZ == true && strcmpi(Settings.Filter,'Hindley23'); Data = 
 %produce storage arrays
 NProfiles = size(Data.Tp,1);
 NLevs     = size(Data.Tp,2);
-OutData   = spawn_uniform_struct({'A','Lz','Lh','Lat','Lon','Alt','Tp','MF','Time'},[NProfiles,NLevs]);
+OutData   = spawn_uniform_struct({'A','Lz','Lh','Lat','Lon','Alt','Tp','MF','Time','FailReason'},[NProfiles,NLevs]);
 Mask      = ones([NProfiles,NLevs]); %this is used to mask out bad data later
 
 %some approaches require two adjacent profiles to be computed. To avoid duplicate computation,
 %this is marginally more efficient if we work backwards and store the next profile for this case.
 
-
 textprogressbar('--> Computing gravity waves ')
 for iProf=NProfiles:-1:1
 
+  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+  %S-Transform the profile
+  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
   %fill any NaNs with a zero for purposes of the ST
-  %replace with NaNs afterwards
+  %we'll replace with NaNs at the end of the programme
   NoData = find(isnan(Data.Tp(iProf,:)));
   Tp = Data.Tp(iProf,:); Tp(NoData) = 0;
+  Mask(iProf,NoData) = 0;
+
+  %zero-pad the data to prevent FFT wraparound
+  Tp = [zeros(1,Settings.STPadSize),Tp,zeros(1,Settings.STPadSize)];
 
   %compute ST
   ThisST = nph_ndst(Tp,                                ...
@@ -235,11 +244,16 @@ for iProf=NProfiles:-1:1
                     Settings.STc);
   clear Tp 
 
-  %remove the data where we put zeros
-  f = {'A','R','HA','HR','F1','allgws','BoostFactor'}; for iF=1:1:numel(f); a = ThisST.(f{iF}); a(NoData) = NaN; ThisST.(f{iF}) = a; end
-  ThisST.ST(:,NoData) = NaN;
-  ThisST.C(   NoData) = NaN;
-  clear NoData f iF
+  %remove the zero-padding region from all output variables
+  Fields = {'IN','F1','A','R','HA','HR','allgws','BoostFactor','C'};
+  for iF=1:1:numel(Fields); 
+    F = ThisST.(Fields{iF});
+    F = F(Settings.STPadSize+1:end-Settings.STPadSize);
+    ThisST.(Fields{iF}) = F;
+  end; clear Fields iF F
+  ThisST.ST = ThisST.ST(:,Settings.STPadSize+1:end-Settings.STPadSize);
+
+
   
   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
   %compute and store results depending on analysis
@@ -250,10 +264,12 @@ for iProf=NProfiles:-1:1
     %simple 1DST approach - just store
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-    OutData.A(  iProf,:) = ThisST.A;
-    OutData.Lz( iProf,:) = 1./ThisST.F1;
-    OutData.Lat(iProf,:) = Data.Lat(iProf,:); OutData.Lon(iProf,:) = Data.Lon(iProf,:);
-    OutData.Alt(iProf,:) = Data.Alt(iProf,:); OutData.Tp( iProf,:) = Data.Tp( iProf,:);
+    OutData.A(   iProf,:) = ThisST.A;
+    OutData.Lz(  iProf,:) = 1./ThisST.F1;
+    OutData.Lat( iProf,:) = Data.Lat( iProf,:); OutData.Lon(iProf,:) = Data.Lon(iProf,:);
+    OutData.Alt( iProf,:) = Data.Alt( iProf,:); OutData.Tp( iProf,:) = Data.Tp( iProf,:);
+    OutData.Time(iProf,:) = Data.Time(iProf,:); OutData.FailReason(iProf,:) = 0;
+    
 
   elseif Settings.Analysis == 2
 
@@ -263,10 +279,11 @@ for iProf=NProfiles:-1:1
     %if this is the first profile to be processed, retain the data then move to the next
     if iProf == NProfiles; NextST = ThisST; continue; end
     
+    %assume success until proven otherwise
+    OutData.FailReason(iProf,:) = 0;
 
     %compute cospectrum
     CoSpectrum = ThisST.ST .* conj(NextST.ST);
-
 
     %find time and space separation of the two profiles, 
     dx = nph_haversine([Data.Lat(iProf,  :);Data.Lon(iProf,  :)]', ...
@@ -275,10 +292,14 @@ for iProf=NProfiles:-1:1
     Bad = find(dt > Settings.Maxdt | dx > Settings.MaxdX);
 
     %discard the profile completely if we fall below the minimum acceptable fraction of safe data
-    if numel(Bad)/numel(dx) > 1-Settings.MinFracInProf;  clear Bad dt dx CoSpectrum; continue; end
+    if numel(Bad)/numel(dx) > 1-Settings.MinFracInProf; 
+      OutData.FailReason(iProf,:) = 2; 
+      clear Bad dt dx CoSpectrum; 
+      continue; 
+    end
 
     %if we pass the above, discard any heights where we failed either individually
-    if numel(Bad) > 0; CoSpectrum(:,Bad) = NaN; end
+    if numel(Bad) > 0; CoSpectrum(:,Bad) = NaN; OutData.FailReason(iProf,Bad) = 1; end
 
     %drop modal frequency
     CoSpectrum(1,:) = NaN;
@@ -286,14 +307,14 @@ for iProf=NProfiles:-1:1
     %locate maximum at each height
     [A,idx] = nanmax(CoSpectrum,[],1,'omitnan');
     A = sqrt(abs(A));
-
+    
     %find vertical waveLENGTHS
     Lz = 1./ThisST.freqs(idx);
 
     %find horizontal waveNUMBERS
     dx(dx > Settings.MaxdX) = NaN;
     dPhi = angle(CoSpectrum(idx))./(2*pi);
-    dPhi(dPhi < Settings.MindPhi) = NaN;
+    OutData.FailReason(iProf,dPhi < Settings.MindPhi) = 3; dPhi(dPhi < Settings.MindPhi) = NaN; 
     Lh = abs(dx./dPhi);
 
     %compute MF
@@ -308,15 +329,15 @@ for iProf=NProfiles:-1:1
                               Data.Lon(iProf+[0,1],:));
 
     %store results
-    OutData.Lat( iProf,:) = latmean;
-    OutData.Lon( iProf,:) = lonmean;
-    OutData.Time(iProf,:) = Data.Time(iProf,:);
     OutData.A(   iProf,:) = A;
     OutData.Lz(  iProf,:) = Lz;
     OutData.Lh(  iProf,:) = Lh;
-    OutData.Alt( iProf,:) = Data.Alt(iProf,:);
-    OutData.Tp(  iProf,:) = Data.Tp(iProf,:);
     OutData.MF(  iProf,:) = MF;
+    OutData.Lat( iProf,:) = latmean;
+    OutData.Lon( iProf,:) = lonmean;
+    OutData.Alt( iProf,:) = Data.Alt(iProf,:);
+    OutData.Time(iProf,:) = Data.Time(iProf,:);
+    OutData.Tp(  iProf,:) = Data.Tp(iProf,:);
 
 
     %store the new ST for the next pass
@@ -327,14 +348,18 @@ for iProf=NProfiles:-1:1
   end
 
 
- if mod(iProf,100); textprogressbar(100.*(NProfiles-iProf)./NProfiles); end
+
+ if mod(iProf,200); textprogressbar(100.*(NProfiles-iProf)./NProfiles); end
 end; clear iProf NextST ThisST NextST
 textprogressbar(100); textprogressbar('!')
 
 
+%apply mask
+f= fieldnames(OutData);
+for iF=1:1:numel(f); F = OutData.(f{iF}); F(Mask == 0) = NaN; OutData.(f{iF}) = F; end; 
+OutData.FailReason(Mask == 0) = 4;
+clear iF f F Mask
 end
-
-
 
 
 
