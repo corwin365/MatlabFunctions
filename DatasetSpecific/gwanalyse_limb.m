@@ -304,14 +304,15 @@ for iProf=NProfiles:-1:1
                               Data.Lon(iProf+[0,1],:));
 
     %store results
-    OutData.Lat(iProf,:) = latmean;
-    OutData.Lon(iProf,:) = lonmean;
-    OutData.A(  iProf,:) = A;
-    OutData.Lz( iProf,:) = Lz;
-    OutData.Lh( iProf,:) = Lh;
-    OutData.Alt(iProf,:) = Data.Alt(iProf,:);
-    OutData.Tp( iProf,:) = Data.Tp(iProf,:);
-    OutData.MF( iProf,:) = MF;
+    OutData.Lat( iProf,:) = latmean;
+    OutData.Lon( iProf,:) = lonmean;
+    OutData.Time(iProf,:) = Data.Time(iProf,:);
+    OutData.A(   iProf,:) = A;
+    OutData.Lz(  iProf,:) = Lz;
+    OutData.Lh(  iProf,:) = Lh;
+    OutData.Alt( iProf,:) = Data.Alt(iProf,:);
+    OutData.Tp(  iProf,:) = Data.Tp(iProf,:);
+    OutData.MF(  iProf,:) = MF;
 
     %store the new ST for the next pass
     NextST = ThisST; 
@@ -329,6 +330,7 @@ textprogressbar(100); textprogressbar('!')
 if sum(Mask,'all') ~= numel(Mask);
   f = fieldnames(OutData);
   for iF=1:1:numel(f)
+    if ~isequal(size(OutData.(f{iF}) ),size(OutData.Alt)); continue; end %skip non-standard entries, as being passed through
     OutData.(f{iF}) = OutData.(f{iF}).*Mask;
   end; clear iF f
 end
