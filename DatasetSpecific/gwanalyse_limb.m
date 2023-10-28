@@ -168,7 +168,6 @@ if ~isequal(size(Data.Lat),size(Data.Lon)) ||  ~isequal(size(Data.Lat),size(Data
 end
 
 
-
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% ensure the data is on a regular height grid
 % for Hindley23 removal, this must be done AFTER detrending, as new data are loaded
@@ -465,14 +464,16 @@ end
 function Data = regularise_data_z(Data,Settings)
 
 
-%first, check if the data is ALREADY regular in z. Counts if the full distribution is within 5% of the mean.
+%first, check if the data is ALREADY regular AND ascending in z. Counts if the full distribution is within 5% of the mean.
 %if it's fine, we don't need to proceed
 dZ_distrib = unique(diff(Data.Alt,1,2));
-if range(dZ_distrib) < 0.1.* nanmean(dZ_distrib); return; end
+
+
+if min(diff(Data.Alt,1,2),[],'all') > 0 & range(dZ_distrib) < 0.1.* nanmean(dZ_distrib); return; end
 
 
 %ok, we need to regularise. First, work out a scale
-NewZ = nanmin(Data.Alt(:)):nanmean(dZ_distrib):nanmax(Data.Alt(:));
+NewZ = nanmin(Data.Alt(:)):nanmean(abs(dZ_distrib)):nanmax(Data.Alt(:));
 clear dZ_distrib
 
 
