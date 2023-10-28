@@ -52,7 +52,7 @@ function [OutData,PW] = gwanalyse_limb(Data,varargin)
 %    Filter          (char,          'SGolay')  type of detrending filter to use (see below)
 %    STScales        (vector,   1:1:NLevels/2)  number of scales to use in 1D ST
 %    STc             (positive real,     0.25)  value of 'c' to use in ST
-%    RegulariseZ     (logical            true)  inteprolate the data to a regular height grid
+%    RegulariseZ     (logical            true)  interpolate the data to a regular height grid
 %
 %-----------------------------------
 %if 'Analysis' is set to 2, then the following options can be used:
@@ -62,7 +62,7 @@ function [OutData,PW] = gwanalyse_limb(Data,varargin)
 %    MinFracInProf   (positive real,      0.5)  minimum fraction useful levels remaining in a profile after above two filters to proceed
 %-----------------------------------
 %if 'Filter' is set to 'Hindley23', then the following options can be used:
-%    H23_OutRem (logical                 true)   remove outliers from H23 fitting, as in get_limbsounders()
+%    H23_OutRem (logical,                true)   remove outliers from H23 fitting, as in get_limbsounders()
 %-----------------------------------
 %if 'Filter' is set to 'SGolay', then the following options can be used:
 %    SGOrder         (integer,              2)  order of Savitzky-Golay filter to use
@@ -141,11 +141,11 @@ addParameter(p,'H23_OutRem',  true,@islogical) %remove outliers?
 %parse inputs
 parse(p,Data,varargin{:})
 
-%pull out the remaining arguments into struct "Inputs", used throughout rest of routine
-Input = p.Results;
-Data = Input.Data; Input = rmfield(Input,'Data');
-Input.TimeRange = [floor(nanmin(Data.Time,[],'all')),ceil(nanmax(Data.Time,[],'all'))];
-clearvars -except InstInfo Input Data
+%pull out the remaining arguments into struct "Settingss", used throughout rest of routine
+Settings = p.Results;
+Data = Settings.Data; Settings = rmfield(Settings,'Data');
+Settings.TimeRange = [floor(nanmin(Data.Time,[],'all')),ceil(nanmax(Data.Time,[],'all'))];
+clearvars -except InstInfo Settings Data
 
 %check contents of input data struct:
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -157,7 +157,7 @@ if ~isfield(Data,'Lat') ||  ~isfield(Data,'Lon') || ~isfield(Data,'Alt')
 end
 
 %for all except Hindley23, we also need a 'Temp' field containing temperature
-if ~strcmpi(Input.Filter,'Hindley23') &  ~isfield(Data,'Temp');
+if ~strcmpi(Settings.Filter,'Hindley23') &  ~isfield(Data,'Temp');
   error('Missing field - struct must contain Temp field.')
 else Data.Temp = NaN(size(Data.Lon)); end %this will be ignored anyway in the analysis
 
@@ -177,7 +177,7 @@ if isfield(Data,'Note'); Data = rmfield(Data,'Note'); end
 % for Hindley23 removal, this must be done AFTER detrending, as new data are loaded
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-if Input.RegulariseZ == true && ~strcmpi(Input.Filter,'Hindley23_ISSI'); Data = regularise_data_z(Data,Input); end
+if Settings.RegulariseZ == true && ~strcmpi(Settings.Filter,'Hindley23_ISSI'); Data = regularise_data_z(Data,Settings); end
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -191,9 +191,9 @@ Data.Tp = Data.Temp;
 %now, apply the filter. Currently only one at a time, but simple to rewrite
 %this to apply multiple filters if needed
 
-if     strcmpi(Input.Filter,   'PWgrid'); [Data,PW] = filter_pwgrid(   Data,Input);
-elseif strcmpi(Input.Filter,   'SGolay'); Data      = filter_sgolay(   Data,Input);
-elseif strcmpi(Input.Filter,'Hindley23'); [Data,PW] = filter_hindley23(Data,Input); 
+if     strcmpi(Settings.Filter,   'PWgrid'); [Data,PW] = filter_pwgrid(   Data,Settings);
+elseif strcmpi(Settings.Filter,   'SGolay'); Data      = filter_sgolay(   Data,Settings);
+elseif strcmpi(Settings.Filter,'Hindley23'); [Data,PW] = filter_hindley23(Data,Settings); 
 else
   disp('Filter type not included in programme, stopping')
   stop
@@ -206,7 +206,7 @@ if ~exist('PW','var'); PW.Comment = 'Planetary wave filter not used, no PW data 
 
 
 %regularisation if using Hindley23 detrending
-if Input.RegulariseZ == true && strcmpi(Input.Filter,'Hindley23_ISSI'); Data = regularise_data_z(Data,Input); end
+if Settings.RegulariseZ == true && strcmpi(Settings.Filter,'Hindley23_ISSI'); Data = regularise_data_z(Data,Settings); end
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -234,17 +234,17 @@ for iProf=NProfiles:-1:1
   Tp = Data.Tp(iProf,:); Tp(NoData) = 0;
 
   %compute ST
-  ThisST = nph_ndst(Tp,                  ...
-                    Input.STScales,                    ...
+  ThisST = nph_ndst(Tp,                                ...
+                    Settings.STScales,                 ...
                     nanmean(diff(Data.Alt(iProf,:))),  ...
-                    Input.STc);
+                    Settings.STc);
   clear Tp NoData
 
   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
   %compute and store results depending on analysis
   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-  if Input.Analysis == 1
+  if Settings.Analysis == 1
 
     %simple 1DST approach - just store
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -254,7 +254,7 @@ for iProf=NProfiles:-1:1
     OutData.Lat(iProf,:) = Data.Lat(iProf,:); OutData.Lon(iProf,:) = Data.Lon(iProf,:);
     OutData.Alt(iProf,:) = Data.Alt(iProf,:); OutData.Tp( iProf,:) = Data.Tp( iProf,:);
 
-  elseif Input.Analysis == 2
+  elseif Settings.Analysis == 2
 
     %Alexander et al (JGR, 2008) approach
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -271,10 +271,10 @@ for iProf=NProfiles:-1:1
     dx = nph_haversine([Data.Lat(iProf,  :);Data.Lon(iProf,  :)]', ...
                        [Data.Lat(iProf+1,:);Data.Lon(iProf+1,:)]')';
     dt = abs(Data.Time(iProf,:) - Data.Time(iProf+1,:)).*60.*60.*24;
-    Bad = find(dt > Input.Maxdt | dx > Input.MaxdX);
+    Bad = find(dt > Settings.Maxdt | dx > Settings.MaxdX);
 
     %discard the profile completely if we fall below the minimum acceptable fraction of safe data
-    if numel(Bad)/numel(dx) > 1-Input.MinFracInProf;  continue; end
+    if numel(Bad)/numel(dx) > 1-Settings.MinFracInProf;  continue; end
 
     %if we pass the above, discard any heights where we failed either individually
     if numel(Bad) > 0; CoSpectrum(:,Bad) = NaN; end
@@ -291,9 +291,9 @@ for iProf=NProfiles:-1:1
     Lz = 1./ThisST.freqs(idx);
 
     %find horizontal waveNUMBERS
-    dx(dx > Input.MaxdX) = NaN;
+    dx(dx > Settings.MaxdX) = NaN;
     dPhi = angle(CoSpectrum(idx))./(2*pi);
-    dPhi(dPhi < Input.MindPhi) = NaN;
+    dPhi(dPhi < Settings.MindPhi) = NaN;
     Lh = abs(dx./dPhi);
 
     %compute MF
@@ -348,16 +348,16 @@ end
 %% planetary wave filter, grid-based approach
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-function [Data,PW] = filter_pwgrid(Data,Input)
+function [Data,PW] = filter_pwgrid(Data,Settings)
 
 
 %compute a time grid to work on, and also store metadata about the PWs
-PW.Time = min(Input.TimeRange):Input.PWTimeRes:max(Input.TimeRange);
-PW.Lon = Input.PWLonGrid; PW.Lat = Input.PWLatGrid; PW.Alt = Input.PWAltGrid; PW.PWs = 0:1:Input.NPWs;
-PW.WindowSize = Input.PWWindow; PW.MinPercent = Input.PWMinPC;
+PW.Time = min(Settings.TimeRange):Settings.PWTimeRes:max(Settings.TimeRange);
+PW.Lon = Settings.PWLonGrid; PW.Lat = Settings.PWLatGrid; PW.Alt = Settings.PWAltGrid; PW.PWs = 0:1:Settings.NPWs;
+PW.WindowSize = Settings.PWWindow; PW.MinPercent = Settings.PWMinPC;
 
 %generate a store array for the PWs, and for the output T'
-PW.PW = NaN(numel(Input.PWLonGrid),numel(Input.PWLatGrid),numel(Input.PWAltGrid),Input.NPWs+1,numel(PW.Time));
+PW.PW = NaN(numel(Settings.PWLonGrid),numel(Settings.PWLatGrid),numel(Settings.PWAltGrid),Settings.NPWs+1,numel(PW.Time));
 A = Data.Tp.*NaN; %working variable used internally to simplify logic
 
 %fill it, stepping over day-by-day using a time window as specified
@@ -368,7 +368,7 @@ for iStep=1:1:numel(PW.Time)
   %select the data we need by finding find the indices of the points in the UseWindow (points to compute from) and
   %the Output window (points to store, higher resolution)
   %***logic assumes idxO is a subset of idxU***
-  idxU = inrange(Data.Time,PW.Time(iStep)+[-1,1].*(Input.PWWindow)./2);
+  idxU = inrange(Data.Time,PW.Time(iStep)+[-1,1].*(Settings.PWWindow)./2);
   idxO = inrange(Data.Time,PW.Time(iStep)+[-1,1].*(mean(diff(PW.Time)))./2);
   if numel(idxU) == 0 || numel(idxO) == 0; continue; end
 
@@ -377,10 +377,10 @@ for iStep=1:1:numel(PW.Time)
 
   %compute the PWs in the use window, and store it in placeholder A
   %A will overwrite most loops - this is fine as long as idxO is a subset of idxU
-  [A(idxU),b] = pwfilter(Input.NPWs,Input.PWMinPC,                      ...
+  [A(idxU),b] = pwfilter(Settings.NPWs,Settings.PWMinPC,                      ...
                          PWCalcData.Lon,PWCalcData.Lat,PWCalcData.Tp,   ...
-                         Input.PWLonGrid,Input.PWLatGrid,               ...
-                         PWCalcData.Alt,Input.PWAltGrid);
+                         Settings.PWLonGrid,Settings.PWLatGrid,               ...
+                         PWCalcData.Alt,Settings.PWAltGrid);
   %store the Tp and PW data
   Data.Tp(idxO) = A(idxO);
   PW.PW(:,:,:,:,iStep) = permute(b,[2,1,3,4]);
@@ -399,20 +399,20 @@ end
 %% 1D Savitzky-Golay filter
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-function Data = filter_sgolay(Data,Input)
+function Data = filter_sgolay(Data,Settings)
 
 %is the data all the same resolution?
 if nanstd(flatten(diff(Data.Alt,1,2)))./nanmean(flatten(diff(Data.Alt,1,2))) < 0.01;
 
   %if so, we can do this in a single pass
-  FrameLen = abs(make_odd(round(Input.SGLength./nanmean(flatten(diff(Data.Alt,1,2))))));
-  Data.Tp = Data.Temp-sgolayfilt(Data.Tp',Input.SGOrder,FrameLen)';
+  FrameLen = abs(make_odd(round(Settings.SGLength./nanmean(flatten(diff(Data.Alt,1,2))))));
+  Data.Tp = Data.Temp-sgolayfilt(Data.Tp',Settings.SGOrder,FrameLen)';
 else
 
   %if not, we need a loop
   for iProf=1:1:numel(Data.Alt,1)
-    FrameLen = abs(make_odd(round(Input.SGLength./nanmean(Data.Alt(iProf,:)))));
-    Data.Tp(iProf,:) = sgolayfilt(Data.Tp(iProf,:),Input.SGOrder,FrameLen);
+    FrameLen = abs(make_odd(round(Settings.SGLength./nanmean(Data.Alt(iProf,:)))));
+    Data.Tp(iProf,:) = sgolayfilt(Data.Tp(iProf,:),Settings.SGOrder,FrameLen);
   end
 end
 
@@ -426,7 +426,7 @@ end
 %% Hindley23 PW filter
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-function [Data,PW] = filter_hindley23(Data,Input)
+function [Data,PW] = filter_hindley23(Data,Settings)
 
 
  %copy the T' and T fields generated by Neil's code
@@ -439,7 +439,7 @@ function [Data,PW] = filter_hindley23(Data,Input)
  end
 
  %remove outliers
- if Input.H23_OutRem == true
+ if Settings.H23_OutRem == true
 
    %latitude and longitude have physical limits
    Bad = [];
@@ -468,7 +468,7 @@ end
 %% ensure data is on a regular Z grid
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-function Data = regularise_data_z(Data,Input)
+function Data = regularise_data_z(Data,Settings)
 
 
 %first, check if the data is ALREADY regular in z. Counts if the full distribution is within 5% of the mean.
