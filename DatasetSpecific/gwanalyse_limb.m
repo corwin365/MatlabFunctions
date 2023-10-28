@@ -213,7 +213,7 @@ if Settings.RegulariseZ == true && strcmpi(Settings.Filter,'Hindley23'); Data = 
 %produce storage arrays
 NProfiles = size(Data.Tp,1);
 NLevs     = size(Data.Tp,2);
-OutData   = spawn_uniform_struct({'A','Lz','Lh','Lat','Lon','Alt','Tp','MF'},[NProfiles,NLevs]);
+OutData   = spawn_uniform_struct({'A','Lz','Lh','Lat','Lon','Alt','Tp','MF','Time'},[NProfiles,NLevs]);
 Mask      = ones([NProfiles,NLevs]); %this is used to mask out bad data later
 
 %some approaches require two adjacent profiles to be computed. To avoid duplicate computation,
@@ -227,7 +227,6 @@ for iProf=NProfiles:-1:1
   %fill any NaNs with a zero for purposes of the ST
   %replace with NaNs afterwards
   NoData = find(isnan(Data.Tp(iProf,:)));
-  Mask(iProf,NoData) = NaN;
   Tp = Data.Tp(iProf,:); Tp(NoData) = 0;
 
   %compute ST
@@ -235,8 +234,14 @@ for iProf=NProfiles:-1:1
                     Settings.STScales,                 ...
                     nanmean(diff(Data.Alt(iProf,:))),  ...
                     Settings.STc);
-  clear Tp NoData
+  clear Tp 
 
+  %remove the data where we put zeros
+  f = {'A','R','HA','HR','F1','allgws','BoostFactor'}; for iF=1:1:numel(f); a = ThisST.(f{iF}); a(NoData) = NaN; ThisST.(f{iF}) = a; end
+  ThisST.ST(:,NoData) = NaN;
+  ThisST.C(   NoData) = NaN;
+  clear NoData f iF
+  
   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
   %compute and store results depending on analysis
   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -314,6 +319,7 @@ for iProf=NProfiles:-1:1
     OutData.Tp(  iProf,:) = Data.Tp(iProf,:);
     OutData.MF(  iProf,:) = MF;
 
+
     %store the new ST for the next pass
     NextST = ThisST; 
 
@@ -326,14 +332,6 @@ for iProf=NProfiles:-1:1
 end; clear iProf NextST ThisST NextST
 textprogressbar(100); textprogressbar('!')
 
-%remove the data where we put zeros
-if sum(Mask,'all') ~= numel(Mask);
-  f = fieldnames(OutData);
-  for iF=1:1:numel(f)
-    if ~isequal(size(OutData.(f{iF}) ),size(OutData.Alt)); continue; end %skip non-standard entries, as being passed through
-    OutData.(f{iF}) = OutData.(f{iF}).*Mask;
-  end; clear iF f
-end
 
 end
 
