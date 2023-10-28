@@ -1,40 +1,75 @@
-function [OutData,PW] = limb_gws(Data,varargin)
+function [OutData,PW] = gwanalyse_limb(Data,varargin)
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%general-purpose function to find GWs from limb sounders
-%
-%the routine assumes when using a vertical filter that singularities 
-%like the tropopause have been removed - make sure this is the case.
+%general-purpose function to measure GWs using vertical profile data
 %
 %
 %Corwin Wright, c.wright@bath.ac.uk, 2023/09/04
 %
-%inputs:
+%
+%===================================
+%OUTPUTS:
+%
+%   OutData: struct containing the output fields, on a profile x height grid
+%     A - amplitude (input units)
+%     Lz - vertical wavelength (km)
+%     Lh - horizontal wavelength (km)
+%     Lat - latitude (deg)
+%     Lon - longitude (deg)
+%     Alt - altitude (input units)
+%     Tp - temperature perturbation (input units)
+%     MF  - momentum flux (mPa)
+%     MF and Lh will be present but all NaN if 'filter' is set to anything other than 2
+%
+%   PWs:     array containing PWs. Format varies depending on filter type used.
+%
+%===================================
+%
+%
+%INPUTS:
+%
 %  required:
-%    InstrumentData [struct] - data to use, in the format produced by get_limbsounders.m
+%    InstrumentData [struct] - data to use for the analysis.  This must contain at least the following:
+%         Lat:          latitude of each point, in degrees
+%         Lon:          longitude of each point, in degrees
+%         Alt:          altitude of each point, units arbitrary but must be internally consistent
+%         Time:         time, in Matlab datenum() units
+%
+%   For all filters except 'Hindley23', we also need:
+%         Temp:         temperature, units arbitrary but must be internally consistent
+%
+%   If using the 'Hindley23' planetary wave filter, which is computed externally, then we instead need:
+%         Temp_Residual: residual temperatures after the PW filtering, also arbitrary-but-consistent
+%
+%
 %
 %  optional:
 %
 %    VarName         (type,           default)  description
 %    -----------------------------------------------------------------------------
-%    Filter          (char,          'PWgrid')  type of detrending filter to use (see below)
+%    Analysis        (integer,              2)  type of analysis to use, from (1) 1DST, (2) Alexander et al 2008 
+%    Filter          (char,          'SGolay')  type of detrending filter to use (see below)
 %    STScales        (vector,   1:1:NLevels/2)  number of scales to use in 1D ST
 %    STc             (positive real,     0.25)  value of 'c' to use in ST
-%    Analysis        (integer,              1)  type of analysis to use, from (1) 1DST, (2) Alexander et al 2008. 
-%    RegulariseZ     (logical            true)  ensure the data is on a regular height grid
+%    RegulariseZ     (logical            true)  inteprolate the data to a regular height grid
+%
+%-----------------------------------
+%if 'Analysis' is set to 2, then the following options can be used:
 %    MindPhi         (positive real,     0.05)  minimum fractional phase change permitted for Alexander et al 2008 analysis 
 %    MaxdX           (positive real,      400)  maximum interprofile distance [km] permitted for Alexander et al 2008 analysis 
-%
-%
-%if Filter is set to 'Hindley23_ISSI', then the input 'Data' struct must contain
-%the following fields:
-%
-%    H23_ISSI_Source (char,             'Obs')  subdataset to use, i.e. 'Model' or Obs'
-%    H23_ISSI_OutRem (logical           true)   remove outliers from H23 fitting, as in get_limbsounders()
-%
-%if Filter is set to 'PWgrid', then the following options can be used:
-%
+%    Maxdt           (positive real,      900)  maximum interprofile time [s] permitted for Alexander et al 2008 analysis 
+%    MinFracInProf   (positive real,      0.5)  minimum fraction useful levels remaining in a profile after above two filters to proceed
+%-----------------------------------
+%if 'Filter' is set to 'Hindley23', then the following options can be used:
+%    H23_OutRem (logical                 true)   remove outliers from H23 fitting, as in get_limbsounders()
+%-----------------------------------
+%if 'Filter' is set to 'SGolay', then the following options can be used:
+%    SGOrder         (integer,              2)  order of Savitzky-Golay filter to use
+%    SGLength        (real,                18)  frame length of SG filter, in km
+%When using this filter singularities like the tropopause must be removed in advance
+%-----------------------------------
+%if 'Filter' is set to 'PWgrid', then the following options can be used:
 %    NPWs            (integer,              3)  number of PWs to fit (plus zonal mean)
 %    PWWindow        (positive real,        1)  number of days to use in each PW fit
 %    PWTimeRes       (positive real,        1)  time resolution to export PW fits on
@@ -43,15 +78,7 @@ function [OutData,PW] = limb_gws(Data,varargin)
 %    PWLatGrid       (vector         -90:5:90)  longitude grid to compute PWs on
 %    PWAltGrid       (vector, input grid mean)  altitude grid to compute PWs on
 %
-%if Filter is set to 'SGolay', then the following options can be used:
 %
-%    SGOrder         (integer,              2)  order of Savitzky-Golay filter to use
-%    SGLength        (real,                18)  frame length of SG filter, in km
-%
-%
-%outputs:
-%   Data: struct containing all variables, on a [profiles x height] grid
-%   PWs:  array containing PWs, on a lon x lat x height x wave x days grid
 %
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -71,19 +98,21 @@ p = inputParser;
 addRequired(p,'Data',@isstruct); %input data must be a struct. Will be hand-parsed later.
 
 %analysis to use
-addParameter(p,'Analysis',1,@(x) validateattributes(x,{'numeric'},{'integer','<=',2})) %type of analysis to use (see above)
+addParameter(p,'Analysis',2,@(x) validateattributes(x,{'numeric'},{'integer','<=',2})) %type of analysis to use (see above)
 
 %filter to use
-addParameter(p,'Filter','PWgrid',@ischar) %type of filter to use
+addParameter(p,'Filter','SGolay',@ischar) %type of filter to use
 
 %ST properties
 addParameter(p,'STScales',1:1:size(Data.Alt,2)/2,@isvector  ) %scales to compute on ST
 addParameter(p,'STc',                          1,@ispositive) %'c' parameter for ST
 
 %Alex08 horizontal wavelength properties
-addParameter(p,'MindPhi',0.05,@ispositive) %minimum fractional phase change to compute Lh
-addParameter(p,'MaxdX',   300,@ispositive) %maximum distance between profiles
-
+addParameter(p,'MaxdX',         300,@ispositive) %maximum distance between profiles
+addParameter(p,'Maxdt',         900,@ispositive) %maximum time between profiles
+addParameter(p,'MinFracInProf', 0.5,@ispositive) %maximum fraction of profile remaining after above filters
+addParameter(p,'MindPhi',       0.05,@ispositive) %minimum fractional phase change to compute Lh
+ 
 
 
 %interpolate to a regular height grid? (you probably want to keep this set to true - it checks if it's already true,
@@ -104,8 +133,7 @@ addParameter(p,'SGOrder',  2,@(x) validateattributes(x,{'numeric'},{'>',0})) %SG
 addParameter(p,'SGLength',18,@(x) validateattributes(x,{'numeric'},{'>',0})) %SGolay filter length (km)
 
 %additional parameters - Hindley 2023 filter ('Hindley23')
-addParameter(p,'H23_ISSI_Source', 'Obs',@ischar) %obs or model?
-addParameter(p,'H23_ISSI_OutRem',  true,@islogical) %remove outliers?
+addParameter(p,'H23_OutRem',  true,@islogical) %remove outliers?
 
 %parse inputs and tidy up
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -113,24 +141,36 @@ addParameter(p,'H23_ISSI_OutRem',  true,@islogical) %remove outliers?
 %parse inputs
 parse(p,Data,varargin{:})
 
-%check contents of input data struct:. 
-  %%do we have at least Lat, Lon, Temp, Alt? These are what we use
-if ~isfield(Data,'Lat') ||  ~isfield(Data,'Lon') || ~isfield(Data,'Alt') || ~isfield(Data,'Temp');
-  error('Missing field - struct must contain Lat, Lon, Alt and Temp fields.')
-  return
-end
-  %%are these fields all the same size?
-if ~isequal(size(Data.Lat),size(Data.Lon)) ||  ~isequal(size(Data.Lat),size(Data.Alt)) || ~isequal(size(Data.Lat),size(Data.Temp));
-  error('LAt, Lon, Alt and Temp fields must all be the same size.')
-  return
-end
-
-
 %pull out the remaining arguments into struct "Inputs", used throughout rest of routine
 Input = p.Results;
 Data = Input.Data; Input = rmfield(Input,'Data');
 Input.TimeRange = [floor(nanmin(Data.Time,[],'all')),ceil(nanmax(Data.Time,[],'all'))];
 clearvars -except InstInfo Input Data
+
+%check contents of input data struct:
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%%do we have at least Lat, Lon, Alt? These are used byalll filters
+if ~isfield(Data,'Lat') ||  ~isfield(Data,'Lon') || ~isfield(Data,'Alt')
+  error('Missing field - struct must contain Lat, Lon, and Alt fields.')
+  return
+end
+
+%for all except Hindley23, we also need a 'Temp' field containing temperature
+if ~strcmpi(Input.Filter,'Hindley23') &  ~isfield(Data,'Temp');
+  error('Missing field - struct must contain Temp field.')
+else Data.Temp = NaN(size(Data.Lon)); end %this will be ignored anyway in the analysis
+
+%%are these fields all the same size?
+if ~isequal(size(Data.Lat),size(Data.Lon)) ||  ~isequal(size(Data.Lat),size(Data.Alt)) || ~isequal(size(Data.Lat),size(Data.Temp));
+  error('Lat, Lon, Alt and Temp fields must all be the same size.')
+  return
+end
+
+%Hindley23 data structs often have a comment about PW reconstruction in. If so, remove it.
+if isfield(Data,'Note'); Data = rmfield(Data,'Note'); end
+
+
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% ensure the data is on a regular height grid
@@ -142,7 +182,7 @@ if Input.RegulariseZ == true && ~strcmpi(Input.Filter,'Hindley23_ISSI'); Data = 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% detrend the data
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%tg
 
 %start by duplicating temperatures. All filter functions will act on this,
 %in order to let us combine filters if we want
@@ -151,9 +191,9 @@ Data.Tp = Data.Temp;
 %now, apply the filter. Currently only one at a time, but simple to rewrite
 %this to apply multiple filters if needed
 
-if     strcmpi(Input.Filter,        'PWgrid'); [Data,PW] = filter_pwgrid(       Data,Input);
-elseif strcmpi(Input.Filter,        'SGolay'); Data      = filter_sgolay(       Data,Input);
-elseif strcmpi(Input.Filter,'Hindley23_ISSI'); [Data,PW] = filter_hindley23issi(Data,Input); 
+if     strcmpi(Input.Filter,   'PWgrid'); [Data,PW] = filter_pwgrid(   Data,Input);
+elseif strcmpi(Input.Filter,   'SGolay'); Data      = filter_sgolay(   Data,Input);
+elseif strcmpi(Input.Filter,'Hindley23'); [Data,PW] = filter_hindley23(Data,Input); 
 else
   disp('Filter type not included in programme, stopping')
   stop
@@ -221,33 +261,44 @@ for iProf=NProfiles:-1:1
 
     %if this is the first profile to be processed, retain the data then move to the next
     if iProf == NProfiles; NextST = ThisST; continue; end
+    
 
     %compute cospectrum
     CoSpectrum = ThisST.ST .* conj(NextST.ST);
+
+
+    %find time and space separation of the two profiles, 
+    dx = nph_haversine([Data.Lat(iProf,  :);Data.Lon(iProf,  :)]', ...
+                       [Data.Lat(iProf+1,:);Data.Lon(iProf+1,:)]')';
+    dt = abs(Data.Time(iProf,:) - Data.Time(iProf+1,:)).*60.*60.*24;
+    Bad = find(dt > Input.Maxdt | dx > Input.MaxdX);
+
+    %discard the profile completely if we fall below the minimum acceptable fraction of safe data
+    if numel(Bad)/numel(dx) > 1-Input.MinFracInProf;  continue; end
+
+    %if we pass the above, discard any heights where we failed either individually
+    if numel(Bad) > 0; CoSpectrum(:,Bad) = NaN; end
+    clear Bad
 
     %drop modal frequency
     CoSpectrum(1,:) = NaN;
 
     %locate maximum at each height
-    [A,idx] = max(CoSpectrum,[],1,'omitnan');
+    [A,idx] = nanmax(CoSpectrum,[],1,'omitnan');
     A = sqrt(abs(A));
 
     %find vertical waveLENGTHS
     Lz = 1./ThisST.freqs(idx);
 
     %find horizontal waveNUMBERS
-    dx = nph_haversine([Data.Lat(iProf,  :);Data.Lon(iProf,  :)]', ...
-                       [Data.Lat(iProf+1,:);Data.Lon(iProf+1,:)]');
     dx(dx > Input.MaxdX) = NaN;
     dPhi = angle(CoSpectrum(idx))./(2*pi);
     dPhi(dPhi < Input.MindPhi) = NaN;
-    Lh = abs(dx./dPhi');
-
-
+    Lh = abs(dx./dPhi);
 
     %compute MF
     MF = cjw_airdensity(Data.Pres(iProf,:),Data.Temp(iProf,:))  ...
-      .* (Lz ./ Lh')                                            ...
+      .* (Lz ./ Lh)                                            ...
       .* (9.81./0.02).^2                                        ...
       .*A./(Data.Temp(iProf,:)-Data.Tp(iProf,:)).^2;
 
@@ -273,17 +324,6 @@ for iProf=NProfiles:-1:1
 
   end
 
-
-
-  % % % if numel(NoData) ~= 0;
-  % % %   F = fieldnames(OutData);
-  % % %   for iF=1:1:numel(F)
-  % % %     FieldData = OutData.(F{iF});
-  % % %     FieldData(iProf,NoData) = NaN;
-  % % %     OutData.(F{iF}) = FieldData;
-  % % %   end
-  % % %   clear F iField
-  % % % end
 
  if mod(iProf,100); textprogressbar(100.*(NProfiles-iProf)./NProfiles); end
 end; clear iProf NextST ThisST NextST
@@ -386,22 +426,20 @@ end
 %% Hindley23 PW filter
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-function [Data,PW] = filter_hindley23issi(Data,Input)
+function [Data,PW] = filter_hindley23(Data,Input)
 
- %copy the T' and T fields Neil generated over
- if strcmpi(Input.H23_ISSI_Source,'Obs') | strcmpi(Input.H23_ISSI_Source,'Model');
-   Data.Tp   = Data.(Input.H23_ISSI_Source).Temp_Residual;
-   Data.Temp = Data.(Input.H23_ISSI_Source).Temp;
- else
-   error("This data source is not available for the Hindley23 filter method, must be one of 'Obs' or 'Model");
- end
+
+ %copy the T' and T fields generated by Neil's code
+ Data.Tp   = Data.Temp_Residual;
+ Data.Temp = Data.Temp;
 
  %store PWs
- PW = Data.(Input.H23_ISSI_Source).Temp_PW;
- Data = rmfield(Data,{'Obs','Model'}); %they cause trouble in the logic, and we don't need them any mores
+ if isfield(Data,'Temp_PW'); PW = Data.Temp_PW;
+ else                        PW = 'Hindley23 planetary wave filter used, but raw PW data not passed through analysis';
+ end
 
  %remove outliers
- if Input.H23_ISSI_OutRem == true
+ if Input.H23_OutRem == true
 
    %latitude and longitude have physical limits
    Bad = [];
