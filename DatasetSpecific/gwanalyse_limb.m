@@ -5,7 +5,7 @@ function [OutData,PW] = gwanalyse_limb(Data,varargin)
 %general-purpose function to measure GWs using vertical profile data
 %
 %
-%Corwin Wright, c.wright@bath.ac.uk, 2023/09/04
+%Corwin Wright, c.wright@bath.ac.uk, 2023/10/29
 %
 %
 %===================================
@@ -42,7 +42,9 @@ function [OutData,PW] = gwanalyse_limb(Data,varargin)
 %
 %   If using the 'Hindley23' planetary wave filter, which is computed externally, then we instead need:
 %         Temp_Residual: residual temperatures after the PW filtering, also arbitrary-but-consistent
-%
+%         Temp_PW: planetary wave temperatures for each mode at each location, same units
+%      You probably don't want to do this, but we can also use these inputs for the other filters instead of 'Temp'- the
+%      routine will merge them to produce 'Temp' if so and then proceed normally.
 %
 %
 %  optional:
