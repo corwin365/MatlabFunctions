@@ -57,6 +57,7 @@ function [OutData,PW] = gwanalyse_limb(Data,varargin)
 %    STc             (positive real,        1)  value of 'c' to use in ST
 %    STPadSize       (positive,            20)  levels of zero-padding to put at each end of the data before S-Transforming
 %    RegulariseZ     (logical            true)  interpolate the data to a regular height grid
+%    Verbose         (logical,           true)  report to the user what's happening
 %
 %-----------------------------------
 %if 'Analysis' is set to 2, then the following options can be used:
@@ -118,6 +119,8 @@ addParameter(p,'Maxdt',         900,@ispositive) %maximum time between profiles
 addParameter(p,'MinFracInProf', 0.5,@ispositive) %maximum fraction of profile remaining after above filters
 addParameter(p,'MindPhi',       0.025,@ispositive) %minimum fractional phase change to compute Lh
  
+%verbosity
+addParameter(p,'Verbose',  true,@islogical) %print progress updates?
 
 
 %interpolate to a regular height grid? (you probably want to keep this set to true - it checks if it's already true,
@@ -203,8 +206,8 @@ if     strcmpi(Settings.Filter,   'PWgrid'); [Data,PW] = filter_pwgrid(   Data,S
 elseif strcmpi(Settings.Filter,   'SGolay'); Data      = filter_sgolay(   Data,Settings);
 elseif strcmpi(Settings.Filter,'Hindley23'); [Data,PW] = filter_hindley23(Data,Settings); 
 else
-  disp('Filter type not included in programme, stopping')
-  stop
+  error('Filter type not included in programme, stopping')
+  return
 end
 
 
@@ -230,7 +233,7 @@ Mask      = ones([NProfiles,NLevs]); %this is used to mask out bad data later
 %some approaches require two adjacent profiles to be computed. To avoid duplicate computation in this case,
 %it is marginally more efficient if we work backwards and store the 'previous' (i.e. next) profile to permit this.
 
-textprogressbar('--> Computing gravity waves ')
+if Settings.Verbose == 1; textprogressbar('--> Computing gravity waves '); end
 for iProf=NProfiles:-1:1
 
   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -360,9 +363,9 @@ for iProf=NProfiles:-1:1
 
 
 
- if mod(iProf,200); textprogressbar(100.*(NProfiles-iProf)./NProfiles); end
+ if Settings.Verbose == 1; if mod(iProf,200); textprogressbar(100.*(NProfiles-iProf)./NProfiles); end; end
 end; clear iProf NextST ThisST NextST
-textprogressbar(100); textprogressbar('!')
+if Settings.Verbose == 1; textprogressbar(100); textprogressbar('!'); end
 
 
 %apply mask
@@ -392,7 +395,7 @@ PW.PW = NaN(numel(Settings.PWLonGrid),numel(Settings.PWLatGrid),numel(Settings.P
 A = Data.Tp.*NaN; %working variable used internally to simplify logic
 
 %fill it, stepping over day-by-day using a time window as specified
-textprogressbar('--> Computing planetary waves ')
+if Settings.Verbose == 1; textprogressbar('--> Computing planetary waves '); end
 
 for iStep=1:1:numel(PW.Time)
 
@@ -416,10 +419,10 @@ for iStep=1:1:numel(PW.Time)
   Data.Tp(idxO) = A(idxO);
   PW.PW(:,:,:,:,iStep) = permute(b,[2,1,3,4]);
 
-  textprogressbar(100.*iStep./numel(PW.Time))
+  if Settings.Verbose == 1; textprogressbar(100.*iStep./numel(PW.Time)); end
 
 end; clear iDay OutWindow UseWindow idxU PWCalcData a b idxO A iStep
-textprogressbar(100); textprogressbar('!')
+if Settings.Verbose == 1; textprogressbar(100); textprogressbar('!');end
 
 return
 end
@@ -447,7 +450,7 @@ else
   end
 end
 
-disp(['--> Savitzky-Golay filter applied vertically'])
+if Settings.Verbose == 1; disp(['--> Savitzky-Golay filter applied vertically']); end
 
 return
 end
@@ -520,7 +523,7 @@ for iF=1:1:numel(Fields); NewData.(Fields{iF}) = NaN([size(Data.Alt,1),numel(New
 
 %now interpolate EVERYTHING onto the new scale
 Fields  = fieldnames(Data); Fields(ismember(Fields,'Alt')) = [];
-disp('--> Data not on a regular and common height grid, interpolating to [ min Z: mean dZ : max Z ] ')
+if Settings.Verbose == 1; disp('--> Data not on a regular and common height grid, interpolating to [ min Z: mean dZ : max Z ] '); end
 
 for iF=1:1:numel(Fields)
 
