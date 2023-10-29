@@ -153,6 +153,13 @@ clearvars -except InstInfo Settings Data
 %check contents of input data struct:
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
+%%if we have loaded one of the Hindley23 data files but are not using the Hindley 23 filter (not sure why you'd do this 
+% normally, but might be useful for cross-testing) then merge the temperature and PW fields to produce an integrated product
+if ~strcmpi(Settings.Filter,'Hindley23') && ~isfield(Data,'Temp') && isfield(Data,'Temp_PW') && isfield(Data,'Temp_Residual');
+  Data.Temp = sum(Data.Temp_PW,3) + Data.Temp_Residual;
+  Data = rmfield(Data,{'Temp_PW','Temp_Residual','Note'});
+end
+
 %%do we have at least Lat, Lon, Alt? These are used byalll filters
 if ~isfield(Data,'Lat') ||  ~isfield(Data,'Lon') || ~isfield(Data,'Alt')
   error('Missing field - struct must contain Lat, Lon, and Alt fields.')
@@ -169,6 +176,7 @@ if ~isequal(size(Data.Lat),size(Data.Lon)) ||  ~isequal(size(Data.Lat),size(Data
   error('Lat, Lon, Alt and Temp fields must all be the same size.')
   return
 end
+
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
