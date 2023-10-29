@@ -54,7 +54,7 @@ function [OutData,PW] = gwanalyse_limb(Data,varargin)
 %    Analysis        (integer,              2)  type of analysis to use, from (1) 1DST, (2) Alexander et al 2008 
 %    Filter          (char,          'SGolay')  type of detrending filter to use (see below)
 %    STScales        (vector,   1:1:NLevels/2)  number of scales to use in 1D ST
-%    STc             (positive real,     0.25)  value of 'c' to use in ST
+%    STc             (positive real,        1)  value of 'c' to use in ST
 %    STPadSize       (positive,            20)  levels of zero-padding to put at each end of the data before S-Transforming
 %    RegulariseZ     (logical            true)  interpolate the data to a regular height grid
 %
@@ -162,7 +162,7 @@ if ~strcmpi(Settings.Filter,'Hindley23') && ~isfield(Data,'Temp') && isfield(Dat
   Data = rmfield(Data,{'Temp_PW','Temp_Residual','Note'});
 end
 
-%%do we have at least Lat, Lon, Alt? These are used byalll filters
+%%do we have at least Lat, Lon, Alt? These are used by all filters
 if ~isfield(Data,'Lat') ||  ~isfield(Data,'Lon') || ~isfield(Data,'Alt')
   error('Missing field - struct must contain Lat, Lon, and Alt fields.')
   return
@@ -197,8 +197,7 @@ if Settings.RegulariseZ == true && ~strcmpi(Settings.Filter,'Hindley23'); Data =
 %in order to let us combine filters if we want
 Data.Tp = Data.Temp;
 
-%now, apply the filter. Currently only one at a time, but simple to rewrite
-%this to apply multiple filters if needed
+%now, apply the filter. Currently only one at a time, but simple to rewrite in the future to apply multiple filters if needed
 
 if     strcmpi(Settings.Filter,   'PWgrid'); [Data,PW] = filter_pwgrid(   Data,Settings);
 elseif strcmpi(Settings.Filter,   'SGolay'); Data      = filter_sgolay(   Data,Settings);
@@ -228,8 +227,8 @@ NLevs     = size(Data.Tp,2);
 OutData   = spawn_uniform_struct({'A','Lz','Lh','Lat','Lon','Alt','Tp','MF','Time','FailReason'},[NProfiles,NLevs]);
 Mask      = ones([NProfiles,NLevs]); %this is used to mask out bad data later
 
-%some approaches require two adjacent profiles to be computed. To avoid duplicate computation,
-%this is marginally more efficient if we work backwards and store the next profile for this case.
+%some approaches require two adjacent profiles to be computed. To avoid duplicate computation in this case,
+%it is marginally more efficient if we work backwards and store the 'previous' (i.e. next) profile to permit this.
 
 textprogressbar('--> Computing gravity waves ')
 for iProf=NProfiles:-1:1
