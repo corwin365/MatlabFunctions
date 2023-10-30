@@ -16,9 +16,7 @@ function Data =  get_limbsounders(TimeRange,Instrument,varargin)
 %  2023/09/13 added ACE-FTS as a valid instrument
 %  2023/09/13 added ability to select profiles by lat/lon
 %  2023/09/19 added MIPAS and SOFIE
-%
-%
-%
+%  2023/10/30 added filenames and profile numbers for backtracking to raw data 
 %
 %inputs:
 %  required:
@@ -40,6 +38,7 @@ function Data =  get_limbsounders(TimeRange,Instrument,varargin)
 %    HeightRange     (numeric,      [0,99e99])  height range to clip data to. Combines with HeightScale, but is more useful with OriginalZ.
 %    LatRange        (numeric,       [-90,90])  latitude  range to select. Maximally permissive - allows profiles which enter the box at any height.
 %    LonRange        (numeric,     [-180,180])  longitude range to select. Also maximally permissive.
+%    FileSource      (logical,          false)  pass out the original location of the points, as a list of files plus a file number and profile number within that file
 %
 %
 %outputs:
@@ -122,6 +121,7 @@ addParameter(p,'LonRange',[-180,180],@(x) validateattributes(x,{'numeric'},{'>='
 addParameter(p,'AdditionalVars',   {},@iscell)
 addParameter(p,     'OriginalZ',false,@islogical)
 addParameter(p,  'KeepOutliers',false,@islogical)
+addParameter(p,    'FileSource',false,@islogical)
 
 
 %parse inputs and tidy up
@@ -168,13 +168,15 @@ InstInfo  = InstInfo.(Input.Instrument);
 % + any additional vars requested if valid for that instrument
 
 %list of variables
-Vars = [{'Lat','Lon','Time','Temp','Pres','Alt'},Input.AdditionalVars];
+Vars = [{'Lat','Lon','Time','Temp','Pres','Alt','SourceProf','SourceFile'},Input.AdditionalVars];
 
 %empty structure to store data
 Data = struct();
 for iVar=1:1:numel(Vars); Data.(Vars{iVar}) = []; end
 
 
+FileCount = 0; %tracker of which file original data came from
+FileList  = {}; %list of files original data came from
 switch Input.Instrument
 
   case {'ACE','GNSS'}
@@ -184,24 +186,22 @@ switch Input.Instrument
     %made the formats we store them in.
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-    %temporary fix for some anomalous prs values
-    if strcmp(Input.Instrument,'GNSS')
-      warning('for GNSS, temporarily using alt -> pres instead of pres due to bad stored data')
-    end
-
-
     for DayNumber=floor(min(Input.TimeRange)):1:floor(max(Input.TimeRange));
 
       %work out year and day number and hence filepath
       [y,~,~] = datevec(DayNumber); dn = date2doy(DayNumber);
       switch Input.Instrument
-        case 'GNSS'; File = [InstInfo.Path,'/',sprintf('%04d',y),'/merged_ro_',sprintf('%04d',y),'_',sprintf('%03d',dn),'.mat'];
-        case  'ACE'; File = [InstInfo.Path,'/',sprintf('%04d',y),'/ace_v52_',  sprintf('%04d',y),'d',sprintf('%03d',dn),'.mat'];
+        case 'GNSS'; File = [InstInfo.Path,'/',sprintf('%04d',y),filesep,'merged_ro_',sprintf('%04d',y),'_',sprintf('%03d',dn),'.mat'];
+        case  'ACE'; File = [InstInfo.Path,'/',sprintf('%04d',y),filesep,'ace_v52_',  sprintf('%04d',y),'d',sprintf('%03d',dn),'.mat'];
       end
       if ~exist(File,'file'); clear y dn File; continue; end
 
       %load the data
       InstData = load(File);
+      
+      %store file information
+      FileCount = FileCount+1;
+      f = strsplit(File,filesep); FileList{end+1} = f{end}; clear f;
       clear y dn File
 
       %get the variables we want
@@ -210,6 +210,8 @@ switch Input.Instrument
 
         if ~strcmp(Vars{iVar},'Alt')  ...
          & ~strcmp(Vars{iVar},'Time') ...
+         & ~strcmp(Vars{iVar},'SourceProf') ...
+         & ~strcmp(Vars{iVar},'SourceFile') ...
          & ~strcmp(fieldnames(InstData),Vars{iVar});
           disp(['Variable ',Vars{iVar},' not found, terminating'])
           return
@@ -226,15 +228,12 @@ switch Input.Instrument
               case 'GNSS'; Store.Alt  = repmat(InstData.MSL_alt,[size(InstData.Lat,1),1]);
               case 'ACE';  Store.Alt = InstData.Alt;            
             end
+          case 'SourceProf';Store.SourceProf = single(repmat(1:1:size(Store.Lat,1),size(Store.Lat,2),1)');
+          case 'SourceFile';Store.SourceFile = ones(size(Store.SourceProf)).*FileCount;
           otherwise;   Store.(Vars{iVar}) = InstData.(Vars{iVar});
         end
 
       end; clear iVar
-
-    %temporary fix for some anomalous prs values
-    if strcmp(Input.Instrument,'GNSS')
-      Store.Pres = h2p(Store.Alt);
-    end
 
       %store in main repository
       Data = cat_struct(Data,Store,1);
@@ -256,16 +255,23 @@ switch Input.Instrument
       File = wildcardsearch(InstInfo.Path,['_',sprintf('%04d',y),'d',sprintf('%03d',dn)]);
       if numel(File) == 0; clear y dn File; continue; end
 
+      %store file information
+      FileCount = FileCount+1;
+      f = strsplit(File{1},filesep); FileList{end+1} = f{end}; clear f;
+  
+
       %load variables we need
       Store = struct();
       for iVar=1:1:numel(Vars)
         switch Vars{iVar}
-          case 'Temp'; Store.Temp         = get_HIRDLS(File{1},'Temperature')';
-          case 'Lat';  Store.Lat          = get_HIRDLS(File{1},'Latitude');
-          case 'Lon';  Store.Lon          = get_HIRDLS(File{1},'Longitude');
-          case 'Alt';  Store.Alt          = get_HIRDLS(File{1},'Altitude')'./1000;
-          case 'Pres'; Store.Pres         = get_HIRDLS(File{1},'Pressure'); 
-          case 'Time'; Store.Time         = datenum(1993,1,1,0,0,get_HIRDLS(File{1},'Time'));
+          case 'Temp';       Store.Temp         = get_HIRDLS(File{1},'Temperature')';
+          case 'Lat';        Store.Lat          = get_HIRDLS(File{1},'Latitude');
+          case 'Lon';        Store.Lon          = get_HIRDLS(File{1},'Longitude');
+          case 'Alt';        Store.Alt          = get_HIRDLS(File{1},'Altitude')'./1000;
+          case 'Pres';       Store.Pres         = get_HIRDLS(File{1},'Pressure'); 
+          case 'Time';       Store.Time         = datenum(1993,1,1,0,0,get_HIRDLS(File{1},'Time'));
+          case 'SourceProf'; Store.SourceProf   = single((1:1:numel(Store.Lat))');
+          case 'SourceFile'; Store.SourceFile   = ones(size(Store.SourceProf)).*FileCount;
           otherwise;  
             try;   Store.(Vars{iVar}) = get_HIRDLS(File{1},Vars{iVar}); 
             catch; disp(['Variable ',Vars{iVar},' not found, terminating']); return
@@ -274,10 +280,12 @@ switch Input.Instrument
       end
 
       %reshape 1d variables
-      Store.Lat  = repmat(Store.Lat,  [1,size(Store.Temp,2)]);
-      Store.Lon  = repmat(Store.Lon,  [1,size(Store.Temp,2)]);
-      Store.Time = repmat(Store.Time, [1,size(Store.Temp,2)]);
-      Store.Pres = repmat(Store.Pres',[size(Store.Temp,1),1]);
+      Store.Lat        = repmat(Store.Lat,         [1,size(Store.Temp,2)]);
+      Store.Lon        = repmat(Store.Lon,         [1,size(Store.Temp,2)]);
+      Store.Time       = repmat(Store.Time,        [1,size(Store.Temp,2)]);
+      Store.Pres       = repmat(Store.Pres',       [size(Store.Temp,1),1]);
+      Store.SourceProf = repmat(Store.SourceProf,  [1,size(Store.Temp,2)]);
+      Store.SourceFile = repmat(Store.SourceFile,  [1,size(Store.Temp,2)]);
 
       %HIRDLS stores geolocation at the 30km level, but travels while scanning up and down
       %see Wright et al (ACP, 2015) for the logic of what we're going to do here to reverse
@@ -322,17 +330,23 @@ switch Input.Instrument
 
       %load data and pull out vars
       Working = rCDF(File{1});
+
+      %store file information
+      FileCount = FileCount+1;
+      f = strsplit(File{1},filesep); FileList{end+1} = f{end}; clear f;  
       
       %get variables
       Store = struct();
       for iVar=1:1:numel(Vars)
         switch Vars{iVar}
-          case 'Temp'; Store.Temp  = Working.TEM';
-          case 'Lat';  Store.Lat   = Working.latitude;
-          case 'Lon';  Store.Lon   = Working.longitude;
-          case 'Alt';  Store.Alt   = Working.hgt';
-          case 'Pres'; Store.Pres  = Working.PRE';
-          case 'Time'; Store.Time  = DayNumber+Working.time./24;
+          case 'Temp';       Store.Temp       = Working.TEM';
+          case 'Lat';        Store.Lat        = Working.latitude;
+          case 'Lon';        Store.Lon        = Working.longitude;
+          case 'Alt';        Store.Alt        = Working.hgt';
+          case 'Pres';       Store.Pres       = Working.PRE';
+          case 'Time';       Store.Time       = DayNumber+Working.time./24;
+          case 'SourceProf'; Store.SourceProf = (1:1:numel(Store.Lat))';
+          case 'SourceFile'; Store.SourceFile   = ones(size(Store.SourceProf)).*FileCount;
           otherwise;  
             try;   Store.(Vars{iVar}) = Working.(Vars{iVar}); 
             catch; disp(['Variable ',Vars{iVar},' not found, terminating']); return
@@ -343,9 +357,11 @@ switch Input.Instrument
 
       %reshape
       NLevs = size(Store.Alt,2); NProfs = numel(Store.Lat);
-      Store.Lat  = repmat(Store.Lat, 1,NLevs);
-      Store.Lon  = repmat(Store.Lon, 1,NLevs);
-      Store.Time = repmat(Store.Time,1,NLevs);
+      Store.Lat        = repmat(Store.Lat,       1,NLevs);
+      Store.Lon        = repmat(Store.Lon,       1,NLevs);
+      Store.Time       = repmat(Store.Time,      1,NLevs);
+      Store.SourceProf = repmat(Store.SourceProf,1,NLevs);
+      Store.SourceFile = repmat(Store.SourceFile,1,NLevs);
       clear NLevs NProfs
 
 
@@ -370,16 +386,23 @@ switch Input.Instrument
 
       %load data for day
       Working = get_MLS(File{1},'Temperature');
+
+      %store file information
+      FileCount = FileCount+1;
+      f = strsplit(File{1},filesep); FileList{end+1} = f{end}; clear f;        
+
       %load variables we need
       Store = struct();
       for iVar=1:1:numel(Vars)
         switch Vars{iVar}
-          case 'Temp'; Store.Temp         = Working.L2gpValue';
-          case 'Lat';  Store.Lat          = Working.Latitude;
-          case 'Lon';  Store.Lon          = Working.Longitude;
-          case 'Alt';  Store.Alt          = p2h(Working.Pressure);
-          case 'Pres'; Store.Pres         = Working.Pressure;
-          case 'Time'; Store.Time         = datenum(1993,1,1,0,0,Working.Time);
+          case 'Temp';       Store.Temp         = Working.L2gpValue';
+          case 'Lat';        Store.Lat          = Working.Latitude;
+          case 'Lon';        Store.Lon          = Working.Longitude;
+          case 'Alt';        Store.Alt          = p2h(Working.Pressure);
+          case 'Pres';       Store.Pres         = Working.Pressure;
+          case 'Time';       Store.Time         = datenum(1993,1,1,0,0,Working.Time);
+          case 'SourceProf'; Store.SourceProf   = (1:1:numel(Store.Lat))';
+          case 'SourceFile'; Store.SourceFile   = ones(size(Store.SourceProf)).*FileCount;
           otherwise;  
             try;   Store.(Vars{iVar}) = Working.(Vars{iVar}); 
             catch; disp(['Variable ',Vars{iVar},' not found, terminating']); return
@@ -388,11 +411,13 @@ switch Input.Instrument
       end
 
       %reshape 1d variables
-      Store.Lat  = repmat(Store.Lat,  [1,size(Store.Temp,2)]);
-      Store.Lon  = repmat(Store.Lon,  [1,size(Store.Temp,2)]);
-      Store.Time = repmat(Store.Time, [1,size(Store.Temp,2)]);
-      Store.Pres = repmat(Store.Pres',[size(Store.Temp,1),1]);
-      Store.Alt  = repmat(Store.Alt', [size(Store.Temp,1),1]);
+      Store.Lat        = repmat(Store.Lat,  [1,size(Store.Temp,2)]);
+      Store.Lon        = repmat(Store.Lon,  [1,size(Store.Temp,2)]);
+      Store.Time       = repmat(Store.Time, [1,size(Store.Temp,2)]);
+      Store.SourceProf = repmat(Store.SourceProf,  [1,size(Store.Temp,2)]);
+      Store.SourceFile = repmat(Store.SourceFile,  [1,size(Store.Temp,2)]);
+      Store.Pres       = repmat(Store.Pres',[size(Store.Temp,1),1]);
+      Store.Alt        = repmat(Store.Alt', [size(Store.Temp,1),1]);
       for iField=1:1:numel(Input.AdditionalVars);
         F = Store.(Input.AdditionalVars{iField});
         if     numel(F) == size(Store.Temp,2); F = repmat(F',[size(Store.Temp,1),1]);
@@ -435,13 +460,22 @@ switch Input.Instrument
         OldData.Name = File{1};
         OldData.Data = rCDF(File{1});
 
+        %store file information
+        FileCount = FileCount+1;
+        f = strsplit(File{1},filesep); FileList{end+1} = f{end}; clear f;   
+
         %put dates in a useful unit. We'll handle time within day later, as this can be quite computationally expensive.
         for iEl=1:1:numel(OldData.Data.date)
           id = num2str(OldData.Data.date(iEl));
           OldData.Data.Date(iEl) = datenum(str2double(id(1:4)),1,str2double(id(5:7)),0,0,0);
         end
 
+        %create source profile indices
+        OldData.Data.SourceProf = repmat(1:1:numel(OldData.Data.orbit),size(OldData.Data.time,1),1);
+        OldData.Data.SourceFile = ones(size(OldData.Data.SourceProf)).*FileCount;
+
       end
+
 
       clear File y m
 
@@ -457,6 +491,8 @@ switch Input.Instrument
       Store.Lon = Working.tplongitude';
       Store.Pres = Working.pressure';
       Store.Alt  = Working.tpaltitude';
+      Store.SourceProf  = Working.SourceProf';
+      Store.SourceFile  = Working.SourceFile';
       Store.Temp = Working.ktemp';
 
       %remove bad heights, as they break the interpolation below
@@ -487,8 +523,11 @@ switch Input.Instrument
 
       %load file
       Working = rCDF(File{1});
-      
 
+      %store file information
+      FileCount = FileCount+1;
+      f = strsplit(File{1},filesep); FileList{end+1} = f{end}; clear f;
+      
       %get variables
       Store = struct();
       for iVar=1:1:numel(Vars)
@@ -499,6 +538,8 @@ switch Input.Instrument
           case 'Alt';  Store.Alt   = Working.Altitude';
           case 'Pres'; Store.Pres  = Working.Pressure';
           case 'Time'; Store.Time  = DayNumber+Working.Time_UT./24;
+          case 'SourceProf'; Store.SourceProf = repmat((1:1:size(Store.Lat,1))',1,size(Store.Alt,2));
+          case 'SourceFile'; Store.SourceFile = ones(size(Store.SourceProf)).*FileCount;
           otherwise;  
             try;   Store.(Vars{iVar}) = Working.(Vars{iVar}); 
             catch; disp(['Variable ',Vars{iVar},' not found, terminating']); return
@@ -534,9 +575,7 @@ switch Input.Instrument
 
  
 end
-
-
-
+clear FileCount;
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% interpolate the data to chosen height scale
@@ -637,6 +676,21 @@ if min(Input.LatRange) ~=  -90 || max(Input.LatRange) ~=  90 ...
 
 end
 
+
+%do we want to know where the data came from?
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+if Input.FileSource == 1;
+  %add the filelist to the structure
+  Data.OriginalFiles = FileList;
+else
+  %remove tracker variables
+  Data = rmfield(Data,{'SourceFile','SourceProf'});
+end
+
+
+
+clear FileList;
 
 
 %end of programme
