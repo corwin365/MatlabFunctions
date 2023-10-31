@@ -48,7 +48,6 @@ function Data =  get_limbsounders(TimeRange,Instrument,varargin)
 %(3) is the default because it behaves almost as intuitively as (1) but reduces rutime by not loading a whole day of data to grab one second
 %
 %
-%
 %outputs:
 %   Data: struct containing all variables, on a [profiles x height] grid
 %
