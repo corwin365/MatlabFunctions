@@ -38,7 +38,14 @@ function Data =  get_limbsounders(TimeRange,Instrument,varargin)
 %    HeightRange     (numeric,      [0,99e99])  height range to clip data to. Combines with HeightScale, but is more useful with OriginalZ.
 %    LatRange        (numeric,       [-90,90])  latitude  range to select. Maximally permissive - allows profiles which enter the box at any height.
 %    LonRange        (numeric,     [-180,180])  longitude range to select. Also maximally permissive.
-%    FileSource      (logical,          false)  pass out the original location of the points, as a list of files plus a file number and profile number within that file
+%    FileSource      (logical,          false)  pass out original point locations as file list plus for each point a file and profile number
+%    TimeHandling    (integer,              3)  see list below
+%
+%TimeHandling options:
+% 1. absolutely strictly - (e.g.) datenum(2010,1,[1,2])   will include all of 2010/01/01 and the first second of 2010/01/02
+% 2. generously          - (e.g.) datenum(2010,1,[1.5,2.1]) will include all of 2010/01/01, 2010/01/02 and 2010/01/03
+% 3. fuzzy-ended         - (e.g.) datenum(2010,1,[1,2])   will include all of 2010/01/01 and 2010/01/02 
+%
 %
 %
 %outputs:
@@ -122,6 +129,8 @@ addParameter(p,'AdditionalVars',   {},@iscell)
 addParameter(p,     'OriginalZ',false,@islogical)
 addParameter(p,  'KeepOutliers',false,@islogical)
 addParameter(p,    'FileSource',false,@islogical)
+addParameter(p,    'StrictTime',false,@islogical)
+addParameter(p,  'TimeHandling',    3,@isnumeric)
 
 
 %parse inputs and tidy up
@@ -130,26 +139,48 @@ addParameter(p,    'FileSource',false,@islogical)
 %parse inputs
 parse(p,TimeRange,Instrument,varargin{:})
 
-%additional check on dates - must be either a single value (a day to load all of) or two values (start and end time)
-if     numel(TimeRange)  > 2;  error('TimeRange must be either one value (a day of interest) or two values (a time range)');
-elseif numel(TimeRange) == 1; TimeRange = [floor(TimeRange),floor(TimeRange)+1-1e-8]; end % strictly the latter bound is very slight less than a day...
-
-%additional check on dates - must be in valid range for instrument
-if   min(TimeRange) > InstInfo.(Instrument).TimeRange(2) ...
-   | max(TimeRange) < InstInfo.(Instrument).TimeRange(1)
-  error(['Data for ',Instrument,' is only available from ',datestr(InstInfo.(Instrument).TimeRange(1)),' to ',datestr(InstInfo.(Instrument).TimeRange(2))]);
-end
-
-
-%pull out the contents into struct "Inputs", used throughout rest of routine
-Input = p.Results;
-Input.TimeRange = TimeRange;
-clearvars -except InstInfo Input
+%pull out the contents into struct "Settings", used throughout rest of routine
+Settings = p.Results;
+Settings.TimeRange = TimeRange;
+clearvars -except InstInfo Settings
 
 %extract just the metadata for the instrument we want
-InstInfo  = InstInfo.(Input.Instrument);
+InstInfo  = InstInfo.(Settings.Instrument);
 
 
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% time range handling
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%additional check on dates - must be either a single value (a day to load all of) or two values (start and end time)
+if numel(Settings.TimeRange)  > 2;  
+  error('TimeRange must be either one value (a day of interest) or two values (a time range)');
+end
+
+%additional check on dates - must be in valid range for instrument
+if   min(Settings.TimeRange) > InstInfo.TimeRange(2) ...
+   | max(Settings.TimeRange) < InstInfo.TimeRange(1)
+  error(['Data for ',Instrument,' is only available from ',datestr(InstInfo.TimeRange(1)),' to ',datestr(InstInfo.TimeRange(2))]);
+end
+
+%duplicate times if single value given
+if numel(Settings.TimeRange) == 1; Settings.TimeRange = [1,1].*Settings.TimeRange; end
+
+%handle time strictness
+switch Settings.TimeHandling
+  case 1; %do nothing, output should be literally what we asked for
+  case 2;
+    %expand out to include a most generous range of days the user could have meant
+    Settings.TimeRange(1) = floor(Settings.TimeRange(1));
+    if mod(Settings.TimeRange(2),1) == 0; Settings.TimeRange(2) = Settings.TimeRange(2)+1-1e-8;
+    else                                  Settings.TimeRange(2) = ceil(Settings.TimeRange(2))-1e-8;
+    end
+  case 3;
+    %if the last entry is an integer, feather it slightly to avoid loading an extra day
+    if mod(Settings.TimeRange(2),1) == 0; Settings.TimeRange(2) = Settings.TimeRange(2)+1-1e-8; end
+  otherwise
+    error(['Invalid time handling option chosen'])
+end
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -168,7 +199,7 @@ InstInfo  = InstInfo.(Input.Instrument);
 % + any additional vars requested if valid for that instrument
 
 %list of variables
-Vars = [{'Lat','Lon','Time','Temp','Pres','Alt','SourceProf','SourceFile'},Input.AdditionalVars];
+Vars = [{'Lat','Lon','Time','Temp','Pres','Alt','SourceProf','SourceFile'},Settings.AdditionalVars];
 
 %empty structure to store data
 Data = struct();
@@ -177,7 +208,7 @@ for iVar=1:1:numel(Vars); Data.(Vars{iVar}) = []; end
 
 FileCount = 0; %tracker of which file original data came from
 FileList  = {}; %list of files original data came from
-switch Input.Instrument
+switch Settings.Instrument
 
   case {'ACE','GNSS'}
 
@@ -186,11 +217,11 @@ switch Input.Instrument
     %made the formats we store them in.
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-    for DayNumber=floor(min(Input.TimeRange)):1:floor(max(Input.TimeRange));
+    for DayNumber=floor(min(Settings.TimeRange)):1:floor(max(Settings.TimeRange));
 
       %work out year and day number and hence filepath
       [y,~,~] = datevec(DayNumber); dn = date2doy(DayNumber);
-      switch Input.Instrument
+      switch Settings.Instrument
         case 'GNSS'; File = [InstInfo.Path,'/',sprintf('%04d',y),filesep,'merged_ro_',sprintf('%04d',y),'_',sprintf('%03d',dn),'.mat'];
         case  'ACE'; File = [InstInfo.Path,'/',sprintf('%04d',y),filesep,'ace_v52_',  sprintf('%04d',y),'d',sprintf('%03d',dn),'.mat'];
       end
@@ -219,12 +250,12 @@ switch Input.Instrument
 
         switch Vars{iVar}
           case 'Time'; 
-            switch Input.Instrument
+            switch Settings.Instrument
               case 'GNSS'; Store.Time = repmat(InstData.MetaData.time,[1,size(InstData.Lat,2)]);
               case 'ACE';  Store.Time = InstData.Time;
             end
           case 'Alt'; 
-            switch Input.Instrument
+            switch Settings.Instrument
               case 'GNSS'; Store.Alt  = repmat(InstData.MSL_alt,[size(InstData.Lat,1),1]);
               case 'ACE';  Store.Alt = InstData.Alt;            
             end
@@ -248,7 +279,7 @@ switch Input.Instrument
     %% HIRDLS
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-    for DayNumber=floor(min(Input.TimeRange)):1:floor(max(Input.TimeRange));
+    for DayNumber=floor(min(Settings.TimeRange)):1:floor(max(Settings.TimeRange));
 
       %work out year and day number and hence filepath
       [y,~,~] = datevec(DayNumber); dn = date2doy(DayNumber);
@@ -321,7 +352,7 @@ switch Input.Instrument
     %% MIPAS
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-    for DayNumber=floor(min(Input.TimeRange)):1:floor(max(Input.TimeRange));
+    for DayNumber=floor(min(Settings.TimeRange)):1:floor(max(Settings.TimeRange));
 
       %work out filepath
       [y,m,d] = datevec(DayNumber); 
@@ -377,7 +408,7 @@ switch Input.Instrument
     %% MLS
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-    for DayNumber=floor(min(Input.TimeRange)):1:floor(max(Input.TimeRange));
+    for DayNumber=floor(min(Settings.TimeRange)):1:floor(max(Settings.TimeRange));
 
       %work out year and day number and hence filepath
       [y,~,~] = datevec(DayNumber); dn = date2doy(DayNumber);
@@ -418,12 +449,12 @@ switch Input.Instrument
       Store.SourceFile = repmat(Store.SourceFile,  [1,size(Store.Temp,2)]);
       Store.Pres       = repmat(Store.Pres',[size(Store.Temp,1),1]);
       Store.Alt        = repmat(Store.Alt', [size(Store.Temp,1),1]);
-      for iField=1:1:numel(Input.AdditionalVars);
-        F = Store.(Input.AdditionalVars{iField});
+      for iField=1:1:numel(Settings.AdditionalVars);
+        F = Store.(Settings.AdditionalVars{iField});
         if     numel(F) == size(Store.Temp,2); F = repmat(F',[size(Store.Temp,1),1]);
         elseif numel(F) == size(Store.Temp,1); F = repmat(F, [1,size(Store.Temp,2)]);
         end
-        Store.(Input.AdditionalVars{iField}) = F;
+        Store.(Settings.AdditionalVars{iField}) = F;
       end
 
       %store in main repository
@@ -445,7 +476,7 @@ switch Input.Instrument
     OldData.Data = struct();
     OldData.Name = '';
 
-    for DayNumber=floor(min(Input.TimeRange))-1:1:floor(max(Input.TimeRange));  %we need to use the day before the start as well as the underlying data format is orbit-based, not day-based
+    for DayNumber=floor(min(Settings.TimeRange))-1:1:floor(max(Settings.TimeRange));  %we need to use the day before the start as well as the underlying data format is orbit-based, not day-based
 
       %identify file and load, but only if we didn't on a previous loop
       [y,~,~] = datevec(DayNumber);
@@ -515,7 +546,7 @@ switch Input.Instrument
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
   case 'SOFIE';
-    for DayNumber=floor(min(Input.TimeRange)):1:floor(max(Input.TimeRange));
+    for DayNumber=floor(min(Settings.TimeRange)):1:floor(max(Settings.TimeRange));
       %work out year and day number and hence filepath
       [y,~,~] = datevec(DayNumber); dn = date2doy(DayNumber);
       File = wildcardsearch(InstInfo.Path,['Level2_',sprintf('%04d',y),sprintf('%03d',dn)]);
@@ -570,7 +601,7 @@ switch Input.Instrument
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 
-    disp(['Instrument ',Input.Instrument,' not currently handled by this function, terminating'])
+    disp(['Instrument ',Settings.Instrument,' not currently handled by this function, terminating'])
     return
 
  
@@ -585,13 +616,13 @@ clear FileCount;
 
 %time range: do first to reduce size for later steps
 %do at profile level to avoid breaking profiles
-Data = reduce_struct(Data,inrange(nanmean(Data.Time,2),Input.TimeRange),[],1);
+Data = reduce_struct(Data,inrange(nanmean(Data.Time,2),Settings.TimeRange),[],1);
 
 
-if Input.OriginalZ == false
+if Settings.OriginalZ == false
 
   %height scale
-  sz = [size(Data.Lat,1),numel(Input.HeightScale)];
+  sz = [size(Data.Lat,1),numel(Settings.HeightScale)];
   Data2 = struct();
   for iVar=1:1:numel(Vars);
     a = NaN(sz);
@@ -602,7 +633,7 @@ if Input.OriginalZ == false
       Good = find(isfinite(Data.Alt(iProf,:)) ~=0);
       [~,uidx] = unique(Data.Alt(iProf,:));
       Good = intersect(Good,uidx);
-      if numel(Good) > 2;  a(iProf,:) = interp1(Data.Alt(iProf,Good),b(iProf,Good),Input.HeightScale); end
+      if numel(Good) > 2;  a(iProf,:) = interp1(Data.Alt(iProf,Good),b(iProf,Good),Settings.HeightScale); end
 
     end;
     Data2.(Vars{iVar}) = a;
@@ -622,9 +653,10 @@ Data.Lon(Data.Lon > 180) = Data.Lon(Data.Lon > 180)-360;
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 %remove outliers?
-%%%%%%%%%%%%%%%%%%
+%this section does the time filtering as well - if it isn't run you'll get whole days only
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-if Input.KeepOutliers == 0;
+if Settings.KeepOutliers == 0;
 
   %create one big array of badness, then remove from ALL variables in one pass
   Bad = [];
@@ -632,9 +664,11 @@ if Input.KeepOutliers == 0;
   %latitude and longitude have physical limits
   Bad = [Bad;find(Data.Lat <  -90 | Data.Lat >  90 | Data.Lon < -180 | Data.Lon > 180)];
   
-  %time and altitude should always be in the specified range
-  Bad = [Bad;find(Data.Time < min(Input.TimeRange  ) | Data.Time > max(Input.TimeRange  ))];
-  if Input.OriginalZ == false;  Bad = [Bad;find(Data.Alt  < min(Input.HeightScale) | Data.Alt  > max(Input.HeightScale))]; end
+  %altitude should always be in the specified range
+  if Settings.OriginalZ == false;  Bad = [Bad;find(Data.Alt  < min(Settings.HeightScale) | Data.Alt  > max(Settings.HeightScale))]; end
+
+  %time should always be in the specified range
+  Bad = [Bad;find(Data.Time < min(Settings.TimeRange  ) | Data.Time > max(Settings.TimeRange  ))];  
 
   %temperature should be >100K always, and  <400K at altitudes below the mesopause 
   Bad = [Bad;find(Data.Temp < 100)];
@@ -657,8 +691,8 @@ end
 %latitude and longitude filtering?
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-if min(Input.LatRange) ~=  -90 || max(Input.LatRange) ~=  90 ...
- | min(Input.LonRange) ~= -180 || max(Input.LonRange) ~= 180
+if min(Settings.LatRange) ~=  -90 || max(Settings.LatRange) ~=  90 ...
+ | min(Settings.LonRange) ~= -180 || max(Settings.LonRange) ~= 180
 
   %find the min and max of lon and lat for each profile
   Limits = [min(Data.Lon,[],2),max(Data.Lon,[],2), ...
@@ -666,10 +700,10 @@ if min(Input.LatRange) ~=  -90 || max(Input.LatRange) ~=  90 ...
 
   %generate a list of profiles where any point falls inside the limits
   Bad = [];
-  Bad = [Bad;find(Limits(:,1) > max(Input.LonRange))];
-  Bad = [Bad;find(Limits(:,2) < min(Input.LonRange))];
-  Bad = [Bad;find(Limits(:,3) > max(Input.LatRange))];
-  Bad = [Bad;find(Limits(:,4) < min(Input.LatRange))];
+  Bad = [Bad;find(Limits(:,1) > max(Settings.LonRange))];
+  Bad = [Bad;find(Limits(:,2) < min(Settings.LonRange))];
+  Bad = [Bad;find(Limits(:,3) > max(Settings.LatRange))];
+  Bad = [Bad;find(Limits(:,4) < min(Settings.LatRange))];
 
   Good = 1:1:size(Limits,1); Good(Bad) = [];
   Data = reduce_struct(Data,Good,[],1);
@@ -680,7 +714,7 @@ end
 %do we want to know where the data came from?
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-if Input.FileSource == 1;
+if Settings.FileSource == 1;
   %add the filelist to the structure
   Data.OriginalFiles = FileList;
 else
