@@ -55,6 +55,8 @@ function [OutData,PW] = gwanalyse_limb(Data,varargin)
 %    Filter          (char,          'SGolay')  type of detrending filter to use (see below)
 %    STScales        (vector,   1:1:NLevels/2)  number of scales to use in 1D ST
 %    STc             (positive real,        1)  value of 'c' to use in ST
+%    MinLz           (real,                 0)  minimum vertical wavelength returned by ST
+%    MaxLz           (real,             99e99)  maximum vertical wavelength returned by ST
 %    STPadSize       (positive,            20)  levels of zero-padding to put at each end of the data before S-Transforming
 %    RegulariseZ     (logical            true)  interpolate the data to a regular height grid
 %    Verbose         (logical,           true)  report to the user what's happening
@@ -112,6 +114,8 @@ addParameter(p,'Filter','SGolay',@ischar) %type of filter to use
 addParameter(p,'STScales',1:1:size(Data.Alt,2)/2,@isvector  ) %scales to compute on ST
 addParameter(p,'STc',                          1,@ispositive) %'c' parameter for ST
 addParameter(p,'STPadSize',                   20,@ispositive) %levels of zero-padding to put at each end of the data before S-Transforming
+addParameter(p,'MinLz',                        0,@isnumeric)  %minimum vertical wavelength returned
+addParameter(p,'MaxLz',                    99e99,@isnumeric)  %maximum vertical wavelength returned
 
 %Alex08 horizontal wavelength properties
 addParameter(p,'MaxdX',         300,@ispositive) %maximum distance between profiles
@@ -158,6 +162,8 @@ clearvars -except InstInfo Settings Data
 %check contents of input data struct:
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
+
+
 %%if we have loaded one of the Hindley23 data files but are not using the Hindley 23 filter (not sure why you'd do this 
 % normally, but might be useful for cross-testing) then merge the temperature and PW fields to produce an integrated product
 if ~strcmpi(Settings.Filter,'Hindley23') && ~isfield(Data,'Temp') && isfield(Data,'Temp_PW') && isfield(Data,'Temp_Residual');
@@ -174,13 +180,16 @@ end
 %for all except Hindley23, we also need a 'Temp' field containing temperature
 if ~strcmpi(Settings.Filter,'Hindley23') &  ~isfield(Data,'Temp');
   error('Missing field - struct must contain Temp field.')
-else Data.Temp = NaN(size(Data.Lon)); end %this will be ignored anyway in the analysis
+elseif strcmpi(Settings.Filter,'Hindley23');  
+  Data.Temp = NaN(size(Data.Lon)); %this will be ignored anyway in the analysis
+end 
 
 %%are these fields all the same size?
 if ~isequal(size(Data.Lat),size(Data.Lon)) ||  ~isequal(size(Data.Lat),size(Data.Alt)) || ~isequal(size(Data.Lat),size(Data.Temp));
   error('Lat, Lon, Alt and Temp fields must all be the same size.')
   return
 end
+
 
 
 
@@ -227,7 +236,7 @@ if Settings.RegulariseZ == true && strcmpi(Settings.Filter,'Hindley23'); Data = 
 %produce storage arrays
 NProfiles = size(Data.Tp,1);
 NLevs     = size(Data.Tp,2);
-OutData   = spawn_uniform_struct({'A','Lz','Lh','Lat','Lon','Alt','Tp','MF','Time','FailReason'},[NProfiles,NLevs]);
+OutData   = spawn_uniform_struct({'A','Lz','Lh','Lat','Lon','Alt','Tp','MF','Time','FailReason','Temp'},[NProfiles,NLevs]);
 Mask      = ones([NProfiles,NLevs]); %this is used to mask out bad data later
 
 %some approaches require two adjacent profiles to be computed. To avoid duplicate computation in this case,
@@ -253,7 +262,9 @@ for iProf=NProfiles:-1:1
   ThisST = nph_ndst(Tp,                                ...
                     Settings.STScales,                 ...
                     nanmean(diff(Data.Alt(iProf,:))),  ...
-                    Settings.STc);
+                    Settings.STc,                      ...
+                    'minwavelengths',Settings.MinLz,   ...
+                    'maxwavelengths',Settings.MaxLz);
   clear Tp 
 
   %remove the zero-padding region from all output variables
@@ -281,7 +292,8 @@ for iProf=NProfiles:-1:1
     OutData.Lat( iProf,:) = Data.Lat( iProf,:); OutData.Lon(iProf,:) = Data.Lon(iProf,:);
     OutData.Alt( iProf,:) = Data.Alt( iProf,:); OutData.Tp( iProf,:) = Data.Tp( iProf,:);
     OutData.Time(iProf,:) = Data.Time(iProf,:); OutData.FailReason(iProf,:) = 0;
-    
+    OutData.Temp(iProf,:) = Data.Temp(iProf,:);
+     
 
   elseif Settings.Analysis == 2
 
@@ -352,7 +364,7 @@ for iProf=NProfiles:-1:1
     OutData.Alt( iProf,:) = Data.Alt(iProf,:);
     OutData.Time(iProf,:) = Data.Time(iProf,:);
     OutData.Tp(  iProf,:) = Data.Tp(iProf,:);
-
+    OutData.Temp(iProf,:) = Data.Temp(iProf,:);
 
     %store the new ST for the next pass
     NextST = ThisST; 

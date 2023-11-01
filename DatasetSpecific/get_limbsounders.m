@@ -39,7 +39,7 @@ function Data =  get_limbsounders(TimeRange,Instrument,varargin)
 %
 %TimeHandling options:
 % 1. absolutely strictly - (e.g.) datenum(2010,1,[1,2])     will include all of 2010/01/01 and the first second of 2010/01/02
-% 2. generously          - (e.g.) datenum(2010,1,[1.5,2.1]) will include all of 2010/01/01 and 2010/01/02
+% 2. generously          - (e.g.) datenum(2010,1,[1.5,2.1]) will include all of 2010/01/01 and 2010/01/02, but not the first second of 2010/01/03 
 % 3. fuzzy-ended         - (e.g.) datenum(2010,1,[1,2])     will include all of 2010/01/01 and 2010/01/02, but not the first second of 2010/01/03 
 %(3) is the default because it behaves almost as intuitively as (1) but reduces rutime by not loading a whole day of data to grab one second
 %
