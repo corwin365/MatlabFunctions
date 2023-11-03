@@ -7,20 +7,25 @@ function [OutData,PW] = gwanalyse_limb(Data,varargin)
 %
 %Corwin Wright, c.wright@bath.ac.uk, 2023/10/29
 %
+%updates:
+%  2023/11/03: improved calculation of background temperature; output variable 'Temp' removed and replaced with 'BG'.
+%  2023/11/03: added calculation of GW potential energy - new output 'Ep'
 %
 %===================================
 %OUTPUTS:
 %
 %   OutData: struct containing the output fields, on a profile x height grid
 %     FailReason - reason why no data present (0: data present; 1: MaxdX or Maxdt exceeded; 2: MinFracInProf not met ; 3: MindPhi exceeded; 4. input data was NaN )
-%     A - amplitude (input units)
-%     Lz - vertical wavelength (km)
-%     Lh - horizontal wavelength (km)
+%     A   - amplitude (input units)
+%     Lz  - vertical wavelength (km)
+%     Lh  - horizontal wavelength (km)
 %     Lat - latitude (deg)
 %     Lon - longitude (deg)
 %     Alt - altitude (input units)
-%     Tp - temperature perturbation (input units)
+%     Tp  - temperature perturbation (input units)
 %     MF  - momentum flux (mPa)
+%     BG  - background temperature (input units)
+%     Ep  - potential energy (J.kg^-1)
 %     MF and Lh will be present but all NaN if 'filter' is set to anything other than 2
 %
 %   PWs:     array containing PWs. Format varies depending on filter type used.
@@ -60,6 +65,8 @@ function [OutData,PW] = gwanalyse_limb(Data,varargin)
 %    STPadSize       (positive,            20)  levels of zero-padding to put at each end of the data before S-Transforming
 %    RegulariseZ     (logical            true)  interpolate the data to a regular height grid
 %    Verbose         (logical,           true)  report to the user what's happening
+%    N               (real,              0.02)  assumed Brunt-Vaisala frequency
+%    g               (real,              9.81)  assumed acceleration due to gravity
 %
 %-----------------------------------
 %if 'Analysis' is set to 2, then the following options can be used:
@@ -123,9 +130,13 @@ addParameter(p,'Maxdt',         900,@ispositive) %maximum time between profiles
 addParameter(p,'MinFracInProf', 0.5,@ispositive) %maximum fraction of profile remaining after above filters
 addParameter(p,'MindPhi',       0.025,@ispositive) %minimum fractional phase change to compute Lh
  
+%physical constants
+addParameter(p,'N',0.02,@isnumeric)  %Brunt-Vaisala frequency
+addParameter(p,'g',9.81,@isnumeric)  %acceleration due to gravity
+
+
 %verbosity
 addParameter(p,'Verbose',  true,@islogical) %print progress updates?
-
 
 %interpolate to a regular height grid? (you probably want to keep this set to true - it checks if it's already true,
 %and only does the interpolation if needed)
@@ -219,7 +230,6 @@ else
   return
 end
 
-
 %create empty PW output if we didn't generate one. Note that this output will be 
 %fairly meaningless anyway if the PW filter wasn't the first-applied
 if ~exist('PW','var'); PW.Comment = 'Planetary wave filter not used, no PW data computed'; end
@@ -236,7 +246,7 @@ if Settings.RegulariseZ == true && strcmpi(Settings.Filter,'Hindley23'); Data = 
 %produce storage arrays
 NProfiles = size(Data.Tp,1);
 NLevs     = size(Data.Tp,2);
-OutData   = spawn_uniform_struct({'A','Lz','Lh','Lat','Lon','Alt','Tp','MF','Time','FailReason','Temp'},[NProfiles,NLevs]);
+OutData   = spawn_uniform_struct({'A','Lz','Lh','Lat','Lon','Alt','Tp','MF','Time','FailReason','BG','Ep'},[NProfiles,NLevs]);
 Mask      = ones([NProfiles,NLevs]); %this is used to mask out bad data later
 
 %some approaches require two adjacent profiles to be computed. To avoid duplicate computation in this case,
@@ -292,7 +302,9 @@ for iProf=NProfiles:-1:1
     OutData.Lat( iProf,:) = Data.Lat( iProf,:); OutData.Lon(iProf,:) = Data.Lon(iProf,:);
     OutData.Alt( iProf,:) = Data.Alt( iProf,:); OutData.Tp( iProf,:) = Data.Tp( iProf,:);
     OutData.Time(iProf,:) = Data.Time(iProf,:); OutData.FailReason(iProf,:) = 0;
-    OutData.Temp(iProf,:) = Data.Temp(iProf,:);
+    OutData.BG(  iProf,:) = Data.BG(  iProf,:);
+    OutData.Ep(  iProf,:) = 0.5 .* (Settings.g ./ Settings.N).^2 .* (ThisST.A ./ Data.BG(iProf,:)).^2;
+
      
 
   elseif Settings.Analysis == 2
@@ -342,12 +354,19 @@ for iProf=NProfiles:-1:1
     OutData.FailReason(iProf,dPhi < Settings.MindPhi) = 3; 
     dPhi(dPhi < Settings.MindPhi) = NaN; 
 
+    %we need pressure to calculate the density. If we don't have it, estimate it from altitude
+    %the density estimate is itself quite approximate, so this pressure estimate isn't a major source of error
+    if ~isfield(Data,'Pres'); Data.Pres = h2p(Data.Alt); end
+
     %compute Lh and MF
     Lh = abs(dx./dPhi);
-    MF = cjw_airdensity(Data.Pres(iProf,:),Data.Temp(iProf,:))  ...
-      .* (Lz ./ Lh)                                            ...
-      .* (9.81./0.02).^2                                        ...
-      .*A./(Data.Temp(iProf,:)-Data.Tp(iProf,:)).^2;
+    MF = cjw_airdensity(Data.Pres(iProf,:),Data.BG(iProf,:))  ...
+      .* (Lz ./ Lh)                                           ...
+      .* (Settings.g ./ Settings.N).^2                                      ...
+      .* A./(Data.BG(iProf,:)).^2;
+
+    %compute potential energy
+    Ep = 0.5 .* (Settings.g ./ Settings.N).^2 .* (A ./ Data.BG(iProf,:)).^2;    
 
 
     %adjust lat/lon to the midpoint of the profile-pair
@@ -359,12 +378,13 @@ for iProf=NProfiles:-1:1
     OutData.Lz(  iProf,:) = Lz;
     OutData.Lh(  iProf,:) = Lh;
     OutData.MF(  iProf,:) = MF;
+    OutData.Ep(  iProf,:) = Ep;
     OutData.Lat( iProf,:) = latmean;
     OutData.Lon( iProf,:) = lonmean;
     OutData.Alt( iProf,:) = Data.Alt(iProf,:);
     OutData.Time(iProf,:) = Data.Time(iProf,:);
     OutData.Tp(  iProf,:) = Data.Tp(iProf,:);
-    OutData.Temp(iProf,:) = Data.Temp(iProf,:);
+    OutData.BG(  iProf,:) = Data.BG(iProf,:);
 
     %store the new ST for the next pass
     NextST = ThisST; 
@@ -433,8 +453,12 @@ for iStep=1:1:numel(PW.Time)
 
   if Settings.Verbose == 1; textprogressbar(100.*iStep./numel(PW.Time)); end
 
-end; clear iDay OutWindow UseWindow idxU PWCalcData a b idxO A iStep
+end; clear iDay OutWindow UseWindow idxU PWCalcData a b idxO iStep
 if Settings.Verbose == 1; textprogressbar(100); textprogressbar('!');end
+
+%compute background temperature
+I = griddedInterpolant({PW.Lon,PW.Lat,PW.Alt,PW.Time},squeeze(nansum(PW.PW,4)));
+Data.BG = I(Data.Lon,Data.Lat,Data.Alt,Data.Time);
 
 return
 end
@@ -447,18 +471,26 @@ end
 
 function Data = filter_sgolay(Data,Settings)
 
+%create array to store background temperature
+%put this in an if, in case we're calling multiple filters
+if ~isfield(Data,'BG'); Data.BG = Data.Tp.*NaN; GetBG = 1; else GetBG = 0; end
+
+
 %is the data all the same resolution?
 if nanstd(flatten(diff(Data.Alt,1,2)))./nanmean(flatten(diff(Data.Alt,1,2))) < 0.01;
-
   %if so, we can do this in a single pass
   FrameLen = abs(make_odd(round(Settings.SGLength./nanmean(flatten(diff(Data.Alt,1,2))))));
-  Data.Tp = Data.Temp-sgolayfilt(Data.Tp',Settings.SGOrder,FrameLen)';
+  BG = sgolayfilt(Data.Tp',Settings.SGOrder,FrameLen)';
+  if GetBG == 1; Data.BG = BG; end
+  Data.Tp  = Data.Temp-BG;
 else
 
   %if not, we need a loop
   for iProf=1:1:numel(Data.Alt,1)
     FrameLen = abs(make_odd(round(Settings.SGLength./nanmean(Data.Alt(iProf,:)))));
-    Data.Tp(iProf,:) = sgolayfilt(Data.Tp(iProf,:),Settings.SGOrder,FrameLen);
+    BG = sgolayfilt(Data.Tp(iProf,:),Settings.SGOrder,FrameLen);
+    if GetBG == 1; Data.BG(iProf,:) = BG; end
+    Data.Tp(iProf,:) = Data.Tp(iProf,:) - BG;
   end
 end
 
@@ -503,6 +535,8 @@ function [Data,PW] = filter_hindley23(Data,Settings)
    end
  end
 
+ %compute background
+Data.BG = Data.Temp - Data.Tp;
 
 return
 end
