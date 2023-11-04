@@ -5,7 +5,7 @@ function Out = get_imerg(DateList,Path)
 %load IMERG data in HDF5 format into a Matlab struct
 %
 %inputs:
-%  DateList - list of Matlab dates to load. Only works at scale of >= 1 day. Non-continuous periods will include gaps.
+%  DateList - list of Matlab dates to load. Only works at scale of >= 1 day, and will return on a 30min scale whatever you request. Non-continuous periods will include gaps.
 %  Path (optional) -  path to IMERG data, in HDF5 format. Will search subdirectories of this.
 %
 %outputs:
@@ -51,7 +51,7 @@ for iDay=1:1:numel(Settings.TimeScale);
 
   textprogressbar(['Loading IMERG for ',datestr(Settings.TimeScale(iDay)),' '])
 
-  %loop over the files, catting them in time (we only have 48 a day so t
+  %loop over the files
   for iFile=1:1:numel(Files)
 
     %load file
@@ -68,7 +68,6 @@ for iDay=1:1:numel(Settings.TimeScale);
       Out.Error    = Out.Precip;
       Out.PLiquid  = Out.Precip;
     end
-
 
     %store the data
     idx = closest(Data.time,Out.Time);
