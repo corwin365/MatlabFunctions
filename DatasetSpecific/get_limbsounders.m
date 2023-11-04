@@ -58,38 +58,38 @@ function Data =  get_limbsounders(TimeRange,Instrument,varargin)
 %only currently loads temperature and pressure, as generated from GLC data
 InstInfo.ACE.TimeRange      = [datenum(2004,1,35),datenum(9999,999,999)]; %still running at time of writing
 InstInfo.ACE.HeightRange    = [18,125]; %data are available outside this range but are entirely a priori
-InstInfo.ACE.Path           = [LocalDataDir,'/ACE/v5.2/'];
+InstInfo.ACE.Path           = [LocalDataDir,'/ACE/raw/'];
 
 %GNSS
 InstInfo.GNSS.TimeRange     = [datenum(2002,1,1),datenum(9999,999,999)]; %still running at time of writing
 InstInfo.GNSS.HeightRange   = [0,40];
-InstInfo.GNSS.Path          = [LocalDataDir,'/GNSS-RO/'];
+InstInfo.GNSS.Path          = [LocalDataDir,'/GNSS/raw/'];
 
 %HIRDLS
 InstInfo.HIRDLS.TimeRange   = [datenum(2005,1,29),datenum(2008,1,77)];
 InstInfo.HIRDLS.HeightRange = [0,80];
-InstInfo.HIRDLS.Path        = [LocalDataDir,'/HIRDLS'];
+InstInfo.HIRDLS.Path        = [LocalDataDir,'/HIRDLS/raw/'];
 
 %MIPAS
 InstInfo.MIPAS.TimeRange   = [datenum(2002,7,2),datenum(2012,4,8)];
 InstInfo.MIPAS.HeightRange = [0,80];
-InstInfo.MIPAS.Path        = [LocalDataDir,'/MIPAS'];
+InstInfo.MIPAS.Path        = [LocalDataDir,'/MIPAS/raw/'];
 
 %MLS
 %only currently loads temperature files, due to the way I have them stored
 InstInfo.MLS.TimeRange      = [datenum(2004,1,275),datenum(9999,999,999)]; %still running at time of writing
 InstInfo.MLS.HeightRange    = [0,100];
-InstInfo.MLS.Path           = [LocalDataDir,'/MLS/T/'];
+InstInfo.MLS.Path           = [LocalDataDir,'/MLS/raw/'];
 
 %SABER
 InstInfo.SABER.TimeRange   = [datenum(2002,1,1),datenum(9999,999,999)]; %still running at time of writing
 InstInfo.SABER.HeightRange = [0,120];
-InstInfo.SABER.Path        = [LocalDataDir,'/SABER/rawnc-v2/'];
+InstInfo.SABER.Path        = [LocalDataDir,'/SABER/raw/'];
 
 %SOFIE
 InstInfo.SOFIE.TimeRange   = [datenum(2007,1,135),datenum(9999,999,999)]; %still running at time of writing
 InstInfo.SOFIE.HeightRange = [10,110]; %this is the range of the mission time/height cross-sections on their website
-InstInfo.SOFIE.Path        = [LocalDataDir,'/SOFIE/'];
+InstInfo.SOFIE.Path        = [LocalDataDir,'/SOFIE/raw/'];
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
