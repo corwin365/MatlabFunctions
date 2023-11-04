@@ -10,7 +10,7 @@ function [Data] = read_imerg(File)
 
 
 %list of variables in an IMERG HDF file
-Vars = {'lat','lon','precipitation','probabilityLiquidPrecipitation','randomError','time',};
+Vars = {'lat','lon','precipitation','probabilityLiquidPrecipitation','randomError','time'};
 
 %bad data value
 BadFlag = -9999;
