@@ -7,8 +7,8 @@ function Data =  get_limbsounders(TimeRange,Instrument,varargin)
 %loads a specific set of instruments in the formats I store them, so
 %may not work on your system!
 %
-%Note that the guts of the programme is a large number of individual
-%instrument cases, so it may be tricky to read
+%Note that the guts of the programme is handled by an external module
+%file for each instrument that loads and formats the specific data.
 %
 %Corwin Wright, c.wright@bath.ac.uk, 2023/08/15
 %
@@ -17,6 +17,7 @@ function Data =  get_limbsounders(TimeRange,Instrument,varargin)
 %  2023/09/13 added ability to select profiles by lat/lon
 %  2023/09/19 added MIPAS and SOFIE
 %  2023/10/30 added filenames and profile numbers for backtracking to raw data 
+%  2023/11/05 split off specific instrument cases into module files
 %
 %inputs:
 %  required:
@@ -197,8 +198,8 @@ end
 %list of variables
 Vars = [{'Lat','Lon','Time','Temp','Pres','Alt','SourceProf','SourceFile'},Settings.AdditionalVars];
 
+%get the data for this instrument using the appropriate module
 switch Settings.Instrument
-
   case {'ACE','GNSS'}; [Data,FileList] = module_load_ACE_GNSS(Settings,InstInfo,Vars);
   case 'HIRDLS';       [Data,FileList] = module_load_HIRDLS(  Settings,InstInfo,Vars);
   case 'MIPAS';        [Data,FileList] = module_load_MIPAS(   Settings,InstInfo,Vars);
