@@ -16,13 +16,18 @@ if nargin < 4; Dim = 1; end          %assume first dimension if not specified, a
 if numel(Dim) == 0; Dim = 1; end     %if set to blank, then set first dimension
 if nargin < 5; varargin = {}; end    %make sure we have a varargin for the call to interp1 below
 
+
 %expose the desired dimension
 [y,a,b] = expose_dim(y,Dim);
+
+%handle 1d vectors being weird.
+if ndims(x) == 2 && size(x,1) == 1; x = x'; xi =xi';end
 
 %interpolate
 yi = interp1(x,y,xi,varargin{:});
 
-%put the dimensions back in order 
-yi = permute(reshape(yi,[size(yi,1),a(2:end)]),b);
+%put the dimensions back in order
+yi = reshape(yi,[size(yi,1),a(2:end)]);
+yi = permute(yi,b);
 
 return

@@ -1,6 +1,5 @@
 function Data =  get_limbsounders(TimeRange,Instrument,varargin)
 
-
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %general-purpose function to load and format limb sounder data
@@ -18,6 +17,7 @@ function Data =  get_limbsounders(TimeRange,Instrument,varargin)
 %  2023/09/19 added MIPAS and SOFIE
 %  2023/10/30 added filenames and profile numbers for backtracking to raw data 
 %  2023/11/05 split off specific instrument cases into module files
+%  2023/11/05 added option to load HIndley23 PW-filtered data rather than raw satellite data
 %
 %inputs:
 %  required:
@@ -37,6 +37,7 @@ function Data =  get_limbsounders(TimeRange,Instrument,varargin)
 %    LonRange        (numeric,     [-180,180])  longitude range to select. Also maximally permissive.
 %    FileSource      (logical,          false)  pass out original point locations as file list plus for each point a file and profile number
 %    TimeHandling    (numeric,              3)  see list below
+%    GetHindleyPWs   (logical,          false)  get Hindley23 PW data for the instrument rather than raw data
 %
 %TimeHandling options:
 % 1. absolutely strictly - (e.g.) datenum(2010,1,[1,2])     will include all of 2010/01/01 and the first second of 2010/01/02
@@ -128,6 +129,7 @@ addParameter(p,  'KeepOutliers',false,@islogical)
 addParameter(p,    'FileSource',false,@islogical)
 addParameter(p,    'StrictTime',false,@islogical)
 addParameter(p,  'TimeHandling',    3,@isnumeric)
+addParameter(p, 'GetHindleyPWs',false,@islogical)
 
 
 %parse inputs and tidy up
@@ -157,7 +159,7 @@ end
 %additional check on dates - must be in valid range for instrument
 if   min(Settings.TimeRange) > InstInfo.TimeRange(2) ...
    | max(Settings.TimeRange) < InstInfo.TimeRange(1)
-  error(['Data for ',Instrument,' is only available from ',datestr(InstInfo.TimeRange(1)),' to ',datestr(InstInfo.TimeRange(2))]);
+  error(['Data for ',Settings.Instrument,' is only available from ',datestr(InstInfo.TimeRange(1)),' to ',datestr(InstInfo.TimeRange(2))]);
 end
 
 %duplicate times if single value given
@@ -179,6 +181,25 @@ switch Settings.TimeHandling
     error(['Invalid time handling option chosen'])
 end
 
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% this function can also load Hindley23 PW data for each instrument
+%this is assumed to be in the same root path as the data, but with
+%/raw replaced with /pws. We call this by overriding the 
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+if Settings.GetHindleyPWs == true
+
+  %first, alter the path to call the PW directory
+  InstInfo.Path = strrep(InstInfo.Path,'/raw/','/pws/');
+
+  %now, produce a copy of the instrument's real name
+  InstInfo.Inst = 'HIRDLS';
+
+  %and replace the instrument name with a call to the PW loader
+  Settings.Instrument = 'HindleyPWs';
+
+end
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% loading - instrument specific, see modules
@@ -196,16 +217,22 @@ end
 % + any additional vars requested if valid for that instrument
 
 %list of variables
-Vars = [{'Lat','Lon','Time','Temp','Pres','Alt','SourceProf','SourceFile'},Settings.AdditionalVars];
+if Settings.GetHindleyPWs == true; Vars = [{'Lat','Lon','Time','Temp_Residual','Temp_PW','Pres','Alt','SourceProf','SourceFile'},Settings.AdditionalVars];
+else                               Vars = [{'Lat','Lon','Time','Temp','Pres','Alt','SourceProf','SourceFile'},Settings.AdditionalVars];
+end
 
 %get the data for this instrument using the appropriate module
 switch Settings.Instrument
+ %standard instruments
   case {'ACE','GNSS'}; [Data,FileList] = module_load_ACE_GNSS(Settings,InstInfo,Vars);
   case 'HIRDLS';       [Data,FileList] = module_load_HIRDLS(  Settings,InstInfo,Vars);
   case 'MIPAS';        [Data,FileList] = module_load_MIPAS(   Settings,InstInfo,Vars);
   case 'MLS';          [Data,FileList] = module_load_MLS(     Settings,InstInfo,Vars);
   case 'SABER';        [Data,FileList] = module_load_SABER(   Settings,InstInfo,Vars);
   case 'SOFIE';        [Data,FileList] = module_load_SOFIE(   Settings,InstInfo,Vars);
+ %pw data loader
+  case 'HindleyPWs';   [Data,FileList] = module_load_pwdata(  Settings,InstInfo,Vars);
+ %fail case
   otherwise
     disp(['Instrument ',Settings.Instrument,' not currently handled by this function, terminating'])
     return
@@ -227,18 +254,25 @@ Data = reduce_struct(Data,inrange(nanmean(Data.Time,2),Settings.TimeRange),[],1)
 if Settings.OriginalZ == false
 
   %height scale
-  sz = [size(Data.Lat,1),numel(Settings.HeightScale)];
+
   Data2 = struct();
   for iVar=1:1:numel(Vars);
-    a = NaN(sz);
+
     b = Data.(Vars{iVar});
+    sz = size(b); sz(2) = numel(Settings.HeightScale);
+    a = NaN(sz);
+    if ndims(a) == 2; sz(3) = 1; end
     for iProf=1:1:sz(1)
 
-      %some extra handling here to deal with bad data, but all we're actualy doing is linear interpolation
+      %some extra handling here to deal with bad data and higher-dimension data, but all we're actualy doing is linear interpolation
       Good = find(isfinite(Data.Alt(iProf,:)) ~=0);
       [~,uidx] = unique(Data.Alt(iProf,:));
       Good = intersect(Good,uidx);
-      if numel(Good) > 2;  a(iProf,:) = interp1(Data.Alt(iProf,Good),b(iProf,Good),Settings.HeightScale); end
+      if numel(Good) > 2; 
+        for iExtraDim=1:1:sz(3);
+          a(iProf,:,iExtraDim) = interp_1d_ndims(Data.Alt(iProf,Good),b(iProf,Good,iExtraDim),Settings.HeightScale,2); 
+        end
+      end
 
     end;
     Data2.(Vars{iVar}) = a;
@@ -249,7 +283,6 @@ end
 
 %longitude
 Data.Lon(Data.Lon > 180) = Data.Lon(Data.Lon > 180)-360;
-
 
 
 
@@ -276,10 +309,12 @@ if Settings.KeepOutliers == 0;
   Bad = [Bad;find(Data.Time < min(Settings.TimeRange  ) | Data.Time > max(Settings.TimeRange  ))];  
 
   %temperature should be >100K always, and  <400K at altitudes below the mesopause 
-  Bad = [Bad;find(Data.Temp < 100)];
-  Bad = [Bad;find(Data.Temp > 400 & Data.Alt < 100)];
+  %it may not exist if we're loading PW data
+  if isfield(Data,'Temp');
+    Bad = [Bad;find(Data.Temp < 100)];
+    Bad = [Bad;find(Data.Temp > 400 & Data.Alt < 100)];
+  end
 
-  
   %do it
   Bad = unique(Bad);
   Fields = fieldnames(Data);
