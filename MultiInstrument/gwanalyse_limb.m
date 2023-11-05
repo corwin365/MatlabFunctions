@@ -235,7 +235,7 @@ if ~exist('PW','var'); PW.Comment = 'Planetary wave filter not used, no PW data 
 
 
 %regularisation if using Hindley23 detrending
-if Settings.RegulariseZ == true && strcmpi(Settings.Filter,'Hindley23'); Data = regularise_data_z(Data,Settings); end
+if Settings.RegulariseZ == true && strcmpi(Settings.Filter,'Hindley23'); Data = func_regularise_data_z(Data,Settings); end
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%

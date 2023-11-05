@@ -27,6 +27,7 @@ function [Data,PW] = func_filter_hindley23(Data,Settings)
    Bad = unique(Bad);
    Fields = fieldnames(Data);
    for iF=1:1:numel(Fields)
+     if ~isequal(size(Data.(Fields{iF})),size(Data.Alt)); continue; end
      F = Data.(Fields{iF});
      F(Bad) = NaN;
      Data.(Fields{iF}) = F;
