@@ -263,6 +263,7 @@ for iProf=NProfiles:-1:1
   NoData = find(isnan(Data.Tp(iProf,:)));
   Tp = Data.Tp(iProf,:); Tp(NoData) = 0;
   Mask(iProf,NoData) = 0;
+  if nansum(Tp) == 0; continue; end % no data
 
   %zero-pad the data to prevent FFT wraparound
   Tp = [zeros(1,Settings.STPadSize),Tp,zeros(1,Settings.STPadSize)];
@@ -274,7 +275,7 @@ for iProf=NProfiles:-1:1
                     Settings.STc,                      ...
                     'minwavelengths',Settings.MinLz,   ...
                     'maxwavelengths',Settings.MaxLz);
-  clear Tp 
+  % clear Tp 
 
   %remove the zero-padding region from all output variables
   Fields = {'IN','F1','A','R','HA','HR','allgws','BoostFactor','C'};

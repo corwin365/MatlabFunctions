@@ -38,6 +38,7 @@ function Data =  get_limbsounders(TimeRange,Instrument,varargin)
 %    FileSource      (logical,          false)  pass out original point locations as file list plus for each point a file and profile number
 %    TimeHandling    (numeric,              3)  see list below
 %    GetHindleyPWs   (logical,          false)  get Hindley23 PW data for the instrument rather than raw data
+%    DateWarning     (logical,           true)  warn the user that data aren't available for the requested date
 %
 %TimeHandling options:
 % 1. absolutely strictly - (e.g.) datenum(2010,1,[1,2])     will include all of 2010/01/01 and the first second of 2010/01/02
@@ -123,13 +124,14 @@ addParameter(p,'LatRange',[ -90, 90],@(x) validateattributes(x,{'numeric'},{'>='
 addParameter(p,'LonRange',[-180,180],@(x) validateattributes(x,{'numeric'},{'>=',-180,'<=',180}))
 
 %additional variables
-addParameter(p,'AdditionalVars',   {},@iscell)
-addParameter(p,     'OriginalZ',false,@islogical)
-addParameter(p,  'KeepOutliers',false,@islogical)
-addParameter(p,    'FileSource',false,@islogical)
-addParameter(p,    'StrictTime',false,@islogical)
-addParameter(p,  'TimeHandling',    3,@isnumeric)
-addParameter(p, 'GetHindleyPWs',false,@islogical)
+addParameter(p, 'AdditionalVars',   {},@iscell)
+addParameter(p,      'OriginalZ',false,@islogical)
+addParameter(p,   'KeepOutliers',false,@islogical)
+addParameter(p,     'FileSource',false,@islogical)
+addParameter(p,     'StrictTime',false,@islogical)
+addParameter(p,   'TimeHandling',    3,@isnumeric)
+addParameter(p,  'GetHindleyPWs',false,@islogical)
+addParameter(p,    'DateWarning', true,@islogical)
 
 
 %parse inputs and tidy up
@@ -157,8 +159,9 @@ if numel(Settings.TimeRange)  > 2;
 end
 
 %additional check on dates - must be in valid range for instrument
-if   min(Settings.TimeRange) > InstInfo.TimeRange(2) ...
-   | max(Settings.TimeRange) < InstInfo.TimeRange(1)
+if Settings.DateWarning == true                         ...
+   &&   min(Settings.TimeRange) > InstInfo.TimeRange(2) ...
+   |    max(Settings.TimeRange) < InstInfo.TimeRange(1)
   error(['Data for ',Settings.Instrument,' is only available from ',datestr(InstInfo.TimeRange(1)),' to ',datestr(InstInfo.TimeRange(2))]);
 end
 
@@ -194,7 +197,7 @@ if Settings.GetHindleyPWs == true
   InstInfo.Path = strrep(InstInfo.Path,'/raw/','/pws/');
 
   %now, produce a copy of the instrument's real name
-  InstInfo.Inst = 'HIRDLS';
+  InstInfo.Inst = Settings.Instrument;
 
   %and replace the instrument name with a call to the PW loader
   Settings.Instrument = 'HindleyPWs';
