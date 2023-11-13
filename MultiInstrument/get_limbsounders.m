@@ -279,14 +279,14 @@ if Settings.OriginalZ == false
   Data2 = struct();
   for iVar=1:1:numel(Vars);
 
-
     b = Data.(Vars{iVar});
     sz = size(b); sz(2) = numel(Settings.HeightScale);
     a = NaN(sz);
     if ndims(a) == 2; sz(3) = 1; end
     for iProf=1:1:sz(1)
 
-      %some extra handling here to deal with bad data and higher-dimension data, but all we're actualy doing is linear interpolation
+      %some extra handling here to deal with bad data and higher-dimension data, but all
+      %we're actualy doing is linear interpolation
       Good = find(isfinite(Data.Alt(iProf,:)) ~=0);
       [~,uidx] = unique(Data.Alt(iProf,:));
       Good = intersect(Good,uidx);
