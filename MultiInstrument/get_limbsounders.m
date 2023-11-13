@@ -9,9 +9,6 @@ function Data =  get_limbsounders(TimeRange,Instrument,varargin)
 %Note that the guts of the programme is handled by an external module
 %file for each instrument that loads and formats the specific data.
 %
-%TODO: currently lat and lon interpolation ignores the dateline. FIX THIS.
-%
-%
 %
 %Corwin Wright, c.wright@bath.ac.uk, 2023/08/15
 %
@@ -21,7 +18,8 @@ function Data =  get_limbsounders(TimeRange,Instrument,varargin)
 %  2023/09/19 added MIPAS and SOFIE
 %  2023/10/30 added filenames and profile numbers for backtracking to raw data 
 %  2023/11/05 split off specific instrument cases into module files
-%  2023/11/05 added option to load HIndley23 PW-filtered data rather than raw satellite data
+%  2023/11/05 added option to load Hindley23 PW-filtered data rather than raw satellite data
+%  2023/11/13 adjusted height-interpolation code to correctly interpolate longitudes near dateline
 %
 %inputs:
 %  required:
