@@ -62,7 +62,7 @@ function [OutData,PW] = gwanalyse_limb(Data,varargin)
 %    STc             (positive real,        1)  value of 'c' to use in ST
 %    MinLz           (real,                 0)  minimum vertical wavelength returned by ST
 %    MaxLz           (real,             99e99)  maximum vertical wavelength returned by ST
-%    STPadSize       (positive,            20)  levels of zero-padding to put at each end of the data before S-Transforming
+%    STPadSize       (real,                20)  levels of zero-padding to put at each end of the data before S-Transforming
 %    RegulariseZ     (logical            true)  interpolate the data to a regular height grid
 %    Verbose         (logical,           true)  report to the user what's happening
 %    N               (real,              0.02)  assumed Brunt-Vaisala frequency
@@ -120,7 +120,7 @@ addParameter(p,'Filter','SGolay',@ischar) %type of filter to use
 %ST properties
 addParameter(p,'STScales',1:1:size(Data.Alt,2)/2,@isvector  ) %scales to compute on ST
 addParameter(p,'STc',                          1,@ispositive) %'c' parameter for ST
-addParameter(p,'STPadSize',                   20,@ispositive) %levels of zero-padding to put at each end of the data before S-Transforming
+addParameter(p,'STPadSize',                   20,@isnumeric ) %levels of zero-padding to put at each end of the data before S-Transforming
 addParameter(p,'MinLz',                        0,@isnumeric)  %minimum vertical wavelength returned
 addParameter(p,'MaxLz',                    99e99,@isnumeric)  %maximum vertical wavelength returned
 
@@ -275,7 +275,7 @@ for iProf=NProfiles:-1:1
                     Settings.STc,                      ...
                     'minwavelengths',Settings.MinLz,   ...
                     'maxwavelengths',Settings.MaxLz);
-  % clear Tp 
+  clear Tp 
 
   %remove the zero-padding region from all output variables
   Fields = {'IN','F1','A','R','HA','HR','allgws','BoostFactor','C'};
@@ -313,7 +313,10 @@ for iProf=NProfiles:-1:1
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
     %if this is the first profile to be processed, retain the data then move to the next
-    if iProf == NProfiles; NextST = ThisST; continue; end
+    if iProf == NProfiles || ~exist('NextST','var'); NextST = ThisST; continue; end
+
+    %if one of the profiles has a lot of missing data, the STs will be different sizes. Skip if so
+    if ~isequal(size(ThisST.ST),size(NextST.ST)); continue; end
     
     %assume success until proven otherwise
     OutData.FailReason(iProf,:) = 0;

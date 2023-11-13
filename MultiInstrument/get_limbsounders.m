@@ -9,6 +9,10 @@ function Data =  get_limbsounders(TimeRange,Instrument,varargin)
 %Note that the guts of the programme is handled by an external module
 %file for each instrument that loads and formats the specific data.
 %
+%TODO: currently lat and lon interpolation ignores the dateline. FIX THIS.
+%
+%
+%
 %Corwin Wright, c.wright@bath.ac.uk, 2023/08/15
 %
 %changes:
@@ -62,6 +66,16 @@ function Data =  get_limbsounders(TimeRange,Instrument,varargin)
 InstInfo.ACE.TimeRange      = [datenum(2004,1,35),datenum(9999,999,999)]; %still running at time of writing
 InstInfo.ACE.HeightRange    = [18,125]; %data are available outside this range but are entirely a priori
 InstInfo.ACE.Path           = [LocalDataDir,'/ACE/raw/'];
+
+%AIRS-3D
+%this is NOT RECOMMENDED for use as AIRS is a nadir sounder, but it will work if absolutely needed
+%this setting will load it as if it was a limb sounder, for below-specified granules and level of data thinning
+InstInfo.AIRS.TimeRange      = [datenum(2002,8,1),datenum(9999,999,999)]; %still running at time of writing
+InstInfo.AIRS.HeightRange    = [0,90]; %a lot of this has awful resolution, but is fine for bulk T. 
+InstInfo.AIRS.Path           = [LocalDataDir,'/AIRS/3d_airs/'];
+InstInfo.AIRS.ThinFactor     = [1,1]; %only take profiles this often in [xt, at] directions, to reduce data volume
+InstInfo.AIRS.Granules       = 1:1:240;
+InstInfo.AIRS.DayNight       = 0; %night
 
 %GNSS
 InstInfo.GNSS.TimeRange     = [datenum(2002,1,1),datenum(9999,999,999)]; %still running at time of writing
@@ -228,6 +242,7 @@ end
 switch Settings.Instrument
  %standard instruments
   case {'ACE','GNSS'}; [Data,FileList] = module_load_ACE_GNSS(Settings,InstInfo,Vars);
+  case 'AIRS';         [Data,FileList] = module_load_AIRS(    Settings,InstInfo,Vars);
   case 'HIRDLS';       [Data,FileList] = module_load_HIRDLS(  Settings,InstInfo,Vars);
   case 'MIPAS';        [Data,FileList] = module_load_MIPAS(   Settings,InstInfo,Vars);
   case 'MLS';          [Data,FileList] = module_load_MLS(     Settings,InstInfo,Vars);
@@ -243,6 +258,7 @@ end
 clear FileCount;
 
 
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% interpolate the data to chosen height scale
 %  and make lons -180 to 180
@@ -256,10 +272,13 @@ Data = reduce_struct(Data,inrange(nanmean(Data.Time,2),Settings.TimeRange),[],1)
 
 if Settings.OriginalZ == false
 
-  %height scale
+  %unwrap longitudes, to make interpolation safe
+  Data.Lon = unwrap(deg2rad(Data.Lon));
 
+  %do the height interpolation over all variables
   Data2 = struct();
   for iVar=1:1:numel(Vars);
+
 
     b = Data.(Vars{iVar});
     sz = size(b); sz(2) = numel(Settings.HeightScale);
@@ -271,9 +290,9 @@ if Settings.OriginalZ == false
       Good = find(isfinite(Data.Alt(iProf,:)) ~=0);
       [~,uidx] = unique(Data.Alt(iProf,:));
       Good = intersect(Good,uidx);
-      if numel(Good) > 2; 
+      if numel(Good) > 2;
         for iExtraDim=1:1:sz(3);
-          a(iProf,:,iExtraDim) = interp_1d_ndims(Data.Alt(iProf,Good),b(iProf,Good,iExtraDim),Settings.HeightScale,2); 
+          a(iProf,:,iExtraDim) = interp_1d_ndims(Data.Alt(iProf,Good),b(iProf,Good,iExtraDim),Settings.HeightScale,2);
         end
       end
 
@@ -281,6 +300,10 @@ if Settings.OriginalZ == false
     Data2.(Vars{iVar}) = a;
   end
   Data = Data2;
+
+  %%wrap the longitudes back into the normal range
+  Data.Lon = rad2deg(wrapToPi(Data.Lon));
+
   clear iProf iVar Data2 a b sz Good uidx
 end
 
