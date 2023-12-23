@@ -29,9 +29,9 @@ function Results = wave_properties(A,k,l,m,varargin)
 %     VarName   (type,  default)  description
 %  -------------------------------------------------------------------------------- 
 %  *  A         (numeric       )  wave amplitude (K)
-%  *  k         (numeric       )  zonal      wavelength (units depend on TwoPiData and MetreData flags)
-%  *  l         (numeric       )  meridional wavelength "     "     "     "     "     "     "     "   
-%  *  m         (numeric       )  vertical   wavelength "     "     "     "     "     "     "     " 
+%  *  k         (numeric       )  zonal      wavenumber (units depend on TwoPiData and MetreData flags)
+%  *  l         (numeric       )  meridional wavenumber "     "     "     "     "     "     "     "   
+%  *  m         (numeric       )  vertical   wavenumber "     "     "     "     "     "     "     " 
 %
 %     Verbose   (logical, false)  flag: should we tell the user about implemented choices?
 %     TwoPiData (logical, false)  flag: are [k,l,m] defined as 2pi/f (true) or   1/f (false)?
@@ -65,11 +65,11 @@ function Results = wave_properties(A,k,l,m,varargin)
 %group speeds:
 %   Group_I_Zonal      - intrinsic    zonal
 %   Group_I_Merid      - intrinsic    meridional
-%   Group_I_Horizontal - intrinsic    horizontal (i.e. sqrt(k^2 + l^2)
+%   Group_I_Horizontal - intrinsic    horizontal (i.e. sqrt(zonal^2 + merid^2))
 %   Group_I_Vertical   - intrinsic    vertical
 %   Group_G_Zonal      - ground-based zonal
 %   Group_G_Merid      - ground-based meridional
-%   Group_G_Horizontal - ground-based horizontal (i.e. sqrt(k^2 + l^2)
+%   Group_G_Horizontal - ground-based horizontal (i.e. sqrt(zonal^2 + merid^2))
 %   Group_G_Vertical   - ground-based vertical
 %
 %phase speeds:
@@ -79,8 +79,8 @@ function Results = wave_properties(A,k,l,m,varargin)
 %  Phase_G_Horizontal - ground-based horizontal
 %
 %directions:
-%  BearingGroup        - group velocity direction in horizontal plane
-%  BearingPhase        - phase velocity direction in horizontal plane
+%  BearingGroup        - group velocity direction in horizontal plane <-- currently not outputted as need to fix a maths mistake
+%  BearingPhase        - phase velocity direction in horizontal plane <-- currently not outputted as need to fix a maths mistake
 %
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
