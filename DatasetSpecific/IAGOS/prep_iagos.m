@@ -90,7 +90,7 @@ VarIdx = find(strcmp(Variables,'UTC_time') ~= 0);
 %go inside this variable and find the units attribute
 Variables = {IAGOS.MetaData.Variables(VarIdx).Attributes(:).Name};
 VarIdx2 = find(strcmp(Variables,'units') ~= 0);
-Units = IAGOS.MetaData.Variables(VarIdx).Attributes(VarIdx2).Value;
+Units = char(IAGOS.MetaData.Variables(VarIdx).Attributes(VarIdx2).Value);
 clear Variables VarIdx VarIdx2
 
 %hence, convert the dates
