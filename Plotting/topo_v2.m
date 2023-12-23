@@ -65,6 +65,7 @@ if numel(idx) > 0;
     case 'Modis';                Path = 'imagery/MODIS_Map.jpg';
     case 'NatEarth';             Path = 'ne/rasterI/NE1_50M_SR_W.tif';
     case 'HRNatEarth';           Path = 'ne/rasterI/HYP_HR_SR_OB_DR.tif';
+    case 'HRNatEarthBright';     Path = 'ne/rasterI/ne_bright.tif';
     case 'land_ocean_ice';       Path = 'imagery/land_ocean_ice_8192.png';
     case 'land_ocean_ice_cloud'; Path = 'imagery/land_ocean_ice_cloud_8192.png';
     case 'faded';                Path = 'imagery/faded.jpg';
