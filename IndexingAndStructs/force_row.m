@@ -11,7 +11,7 @@ function Vector = force_row(Vector)
 %check we have a 1D data series
 sz = size(Vector);
 if    numel(sz) > 2 || (sz(1) ~= 1 & sz(2) ~= 1);
-  warning('make_row() is being applied to a variable with > 1 dimension, skipping operation')
+  warning('foce_row() is being applied to a variable with > 1 dimension, skipping operation')
   return
 end
 
