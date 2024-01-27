@@ -1,21 +1,75 @@
-function FileContents = rCDF(FileName,OldFormat)
+function FileContents = rCDF(FilePath,Method)
 
-if ~exist('OldFormat'); OldFormat = 0; end
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%read netCDF file into Matlab
+%Corwin wright, pre-2015
+%COMPATABILITY-BREAKING update 2024/01/27 - see below
+%
+%inputs:
+%  FilePath: path to file
+%  Method:   0 - [default] call Neil's nph_getnet() but switch order of MetaData
+%                and real data, and reverse variable dimension order to match 
+%                internal netCDF dimension ordering
+%            1 - simple loop over list of fields (simple, but robust)
+%            2 - as 0, but with the nph_getnet() variable order 
+%
+%IMPORTANT WARNING RE: BACKWARDS COMPATIBILITY:
+%  Method [1] was the default before ~2017
+%  Method [2] was the default before 2024/01/27
+%  [0] is NOT BACKWARDS-COMPATIBLE for any variable >1D
+%  old code must be updated to add a method flag of '1' or '2' before use.
+%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-if OldFormat == 1
+%set default method
+if ~exist('Method'); Method = 0; end
+
+
+
+if Method == 0 | Method == 2;
+
+  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+  %based around Neil Hindley's nph_getnet()
+  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+  %run getnet
+  Data = nph_getnet(FilePath);
+
+  %move data up to top level
+  FileContents = Data.Data;
+
+  %move metadata to subsidiary level
+  MetaFields = {'Filename','Name','Dimensions','Variables','Attributes','Groups','Format'};
+  for iField=1:1:numel(MetaFields); FileContents.MetaData.(MetaFields{iField}) = Data.(MetaFields{iField}); end
+
+
+  if Method == 0;
+    %reorder dimensions so that they're in netCDF order (i.e. reverse them)
+    Fields = fieldnames(FileContents);
+    for iField=1:1:numel(Fields)
+      if strcmp(Fields{iField},'MetaData'); continue;
+      else;     
+        sz = size(FileContents.(Fields{iField}));
+        if numel(sz) > 2 | (numel(sz) == 2 & (sz) == 1)
+          FileContents.(Fields{iField}) = permute(FileContents.(Fields{iField}),numel(sz):-1:1);
+        end
+      end
+    end; clear iField
+  end
+
+
+
+elseif Method == 1
   
-  %use my old method - doesn't do a lot of useful things, but more robust for
-  %some uses (not many, it's very old...)
+  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+  %my old method - doesn't do a lot of useful things, but a little more robust 
+  %in some special cases (not many, it's very old...)
+  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
   
+  %open the file  
+  NetCdfID = netcdf.open(FilePath,'NOWRITE'); %open file, read-only access
   
-  %open the file
-  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-  
-  NetCdfID = netcdf.open(FileName,'NOWRITE'); %open file, read-only access
-  
-  %find list of variables in the file
-  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-  
+  %find list of variables in the file 
   [~,NumVars,~,~] = netcdf.inq(NetCdfID);
   
   for iVar=1:1:NumVars;
@@ -24,6 +78,7 @@ if OldFormat == 1
     
     %remove characters which should be in the variable names
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
     %check the varname for spaces.
     %replace them with _s
     spaces = isspace(VarName);
@@ -41,29 +96,10 @@ if OldFormat == 1
     
     Command = strcat(['FileContents.',VarName,' = netcdf.getVar(',num2str(NetCdfID),',',num2str(iVar-1),');']);
     eval(Command);
+
   end
   
-  FileContents.MetaData = ncinfo(FileName);
-  
-  Result = 1; %finished
-  
+  FileContents.MetaData = ncinfo(FilePath);  
   netcdf.close(NetCdfID); % done
   
-  
-  
-else %use neil's method
-  
-  %uses Neil's getnet() routine as it's better, but modified to provide the same
-  %outputs as my old function
-  
-  Data = nph_getnet(FileName);
-  
-  MetaFields = {'Filename','Name','Dimensions','Variables','Attributes','Groups','Format'};
-  FileContents = Data.Data;
-  
-  for iField=1:1:numel(MetaFields)
-    FileContents.MetaData.(MetaFields{iField}) = Data.(MetaFields{iField});
-  end
-
-
 end
