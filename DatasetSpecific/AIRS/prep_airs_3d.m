@@ -366,8 +366,8 @@ if Input.LoadOnly == 1;
 end
   
 
-
-
+%some granules are missing their height axis. If so, add it back in.
+if nansum(Airs.ret_z,'all') == 0; Airs.ret_z = [0,3,6,9,12,15,18,21,24,27,30,33,36,39,42,45,48,51,54,57,60,65,70,75,80,85,90]; end
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% regularise the data in the horizontal
