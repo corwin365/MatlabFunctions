@@ -739,20 +739,76 @@ return
 
 function [Error,Data,FilePath] = get_airs_granule(DataDir,DateNum,GranuleId)
 
+  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+  %try to load the merged daily AIRS 3d format
+  %if that doesn't work, fall back to Lars' output granule format
+  %and if that doesn't work, giveup 
+  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
+  %get date and DoY
   [y,~,~] =datevec(DateNum);
   dn = date2doy(DateNum);
 
+
+  %try merged file
+  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+  FilePath = [DataDir,'/',sprintf('%04d',y),'/airs_',sprintf('%04d',y),'d',sprintf('%03d',dn),'.nc']
+  if exist(FilePath,'file')
+
+    %load and extract what we need, then return
+    Merged = rCDF(FilePath);
+    Merged.l1_lat   = permute(squeeze(Merged.l1_lat(  GranuleId,:,:  )),[2,1]);
+    Merged.l1_lon   = permute(squeeze(Merged.l1_lon(  GranuleId,:,:  )),[2,1]);
+    Merged.l1_time  = permute(squeeze(Merged.l1_time( GranuleId,:,:  )),[2,1]);
+    Merged.ret_temp = permute(squeeze(Merged.ret_temp(GranuleId,:,:,:)),[3,2,1]);
+
+    Data = Merged; clear Merged
+
+    Error = 0;
+    return
+  end
+
+  %try granulewise format
+  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
   FilePath = [DataDir,'/',sprintf('%04d',y),'/',sprintf('%03d',dn),'/', ...
-              'airs_',sprintf('%04d',y),'_',sprintf('%03d',dn),'_',sprintf('%03d',GranuleId),'.nc'];
-  
-  if ~exist(FilePath,'file'); Error = 1; Data = struct(); return;
-  else
+                 'airs_',sprintf('%04d',y),'_',sprintf('%03d',dn),'_',sprintf('%03d',GranuleId),'.nc']
+  if exist(FilePath,'file')
+
+    %load and extract what we need, then return
     Data = cjw_readnetCDF(FilePath);
     Error = 0;
+    return
   end
-    
-              
+
+  %otherwise, we are failures and we should be punished for it
+  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+  Error = 1;
+  Data = struct();
+  return
+
+
+
+
+
+% % % 
+% % % 
+% % % 
+% % % % airs_2010d143.nc
+% % % 
+% % % 
+% % %   FilePath = [DataDir,'/',sprintf('%04d',y),'/',sprintf('%03d',dn),'/', ...
+% % %               'airs_',sprintf('%04d',y),'_',sprintf('%03d',dn),'_',sprintf('%03d',GranuleId),'.nc']
+% % %   stop
+% % % 
+% % %   if ~exist(FilePath,'file'); Error = 1; Data = struct(); return;
+% % %   else
+% % % 
+% % %   end
+% % % 
+% % % 
 
 return
 
@@ -1028,9 +1084,42 @@ return
 
 
 
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% rCDF
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 
+function FileContents = rCDF(FilePath)
 
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%read netCDF file into Matlab
+%Corwin Wright, pre-2015
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+%run getnet
+Data = getnet(FilePath);
+
+%move data up to top level
+FileContents = Data.Data;
+
+%move metadata to subsidiary level
+MetaFields = {'Filename','Name','Dimensions','Variables','Attributes','Groups','Format'};
+for iField=1:1:numel(MetaFields); FileContents.MetaData.(MetaFields{iField}) = Data.(MetaFields{iField}); end
+
+%reorder dimensions so that they're in netCDF order (i.e. reverse them)
+Fields = fieldnames(FileContents);
+for iField=1:1:numel(Fields)
+  if strcmp(Fields{iField},'MetaData'); continue;
+  else;
+    sz = size(FileContents.(Fields{iField}));
+    if numel(sz) > 2 | (numel(sz) == 2 & (sz) == 1)
+      FileContents.(Fields{iField}) = permute(FileContents.(Fields{iField}),numel(sz):-1:1);
+    end
+  end
+end; clear iField
+
+return
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -1240,3 +1329,7 @@ end
 b = a(idx{:});
 
 return
+
+
+
+
