@@ -164,7 +164,7 @@ Spacing = [NaN,NaN,NaN];
 %% general input parsing
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-% try
+try
 
   %create input parser
   %%%%%%%%%%%%%%%%%%%%%%%
@@ -275,6 +275,14 @@ Spacing = [NaN,NaN,NaN];
     end
   end; clear iG
 
+  %silently drop any requests for "granule 0" of a specific day that arise from the above logic
+  Good = find(GranuleId ~= 0);
+  GranuleId = GranuleId(Good);
+  DateNum = DateNum(Good);
+  clear Good
+  if numel(GranuleId) == 0; Error = 1; ErrorInfo = ['Only granule 0 requested, which does not exist']; return; end
+
+
   %parse the inputs, and tidy up
   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
   
@@ -311,11 +319,11 @@ Spacing = [NaN,NaN,NaN];
   Input = rmfield(Input,'FullDataDir');
   
   
-% catch ERR
-%   ErrorInfo = getReport( ERR, 'extended', 'hyperlinks', 'on' );
-%   Error = 1;
-%   return
-% end
+catch ERR
+  ErrorInfo = getReport( ERR, 'extended', 'hyperlinks', 'on' );
+  Error = 1;
+  return
+end
   
 
 
@@ -810,8 +818,10 @@ function [Error,Data,FilePath] = get_airs_granule(DataDir,DateNum,GranuleId)
   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
   if sum(FoundList) ~= numel(FoundList)
-    Error = 1;
+    Error = 1
     Data = struct();
+    FilePath = '';
+    return
   end
 
   %otherwise, stitch them all together
