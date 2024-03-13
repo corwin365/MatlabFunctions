@@ -78,10 +78,6 @@ function [Airs,Spacing,Error,ErrorInfo,MinorErrorInfo] = prep_airs_3d(DateNum,Gr
 %
 %    VarName       (type,  default)  description
 %    -----------------------------------------------------------------------------
-%    NXT           (numeric,    90)  number of cross-track points to interpolate to.
-%    NAT           (numeric,   135)  number of along-track points to interpolate to.
-%    dXT           (numeric,   NaN)  (OVERRIDES NXT) distance between each XT point to interpolate to 
-%    dAT           (numeric,   NaN)  (OVERRIDES NAT) distance between each AT point to interpolate to 
 %    NoDetrend     (logical, false)  do not detrend the data.
 %    DayNightFlag  (logical, false)  compute day/night flags.
 %    KeepOldTime   (logical, false)  keep copy of AIRS time in original format.
@@ -92,6 +88,12 @@ function [Airs,Spacing,Error,ErrorInfo,MinorErrorInfo] = prep_airs_3d(DateNum,Gr
 %    LoadOnly      (logical, false)  load and return data only
 %    NoISCheck     (logical, false)  don't check the validity of an input structure (useful eg for merged multiple granules where the size is wrong)
 %    Python        (logical, false)  Python can't handle recursive structs - if called from there, then remove the MetaData field
+%NOT CURRENTLY WORKING:
+%    NXT           (numeric,    90)  number of cross-track points to interpolate to.
+%    NAT           (numeric,   135)  number of along-track points to interpolate to.
+%    dXT           (numeric,   NaN)  (OVERRIDES NXT) distance between each XT point to interpolate to 
+%    dAT           (numeric,   NaN)  (OVERRIDES NAT) distance between each AT point to interpolate to 
+%
 %
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -161,7 +163,8 @@ Spacing = [NaN,NaN,NaN];
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% general input parsing
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-try
+
+% try
 
   %create input parser
   %%%%%%%%%%%%%%%%%%%%%%%
@@ -198,11 +201,10 @@ try
   %inputs - fully optional
   %%%%%%%%%%%%%%%%%%%%%%%%%
     
-
   %NXT must be a positive integer
   CheckNT = @(x) validateattributes(x,{'numeric'},{'nonnegative','integer'});  
-  addParameter(p,'NXT', 90,CheckNT);  %assume 90 XT rows unless specified  
-  addParameter(p,'NAT',135,CheckNT);  %assume 135 AT rows unless specified  
+  addParameter(p,'NXT',                   90,CheckNT);  %assume 90 XT rows unless specified  
+  addParameter(p,'NAT',135.*numel(GranuleId),CheckNT);  %assume 135 AT rows PER GRANULE unless specified  
    
   %dXT must be positive 
   CheckdT = @(x) validateattributes(x,{'numeric'},{'nonnegative'});
@@ -246,26 +248,39 @@ try
 
   %do we have the right day?
   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%  
-  
+
+  %first, if we have requested multiple granules but only one day, then
+  %duplicate the day out to be the same size
+  if numel(GranuleId) > 1 & numel(DateNum) == 1;
+    %duplicate so they match
+    DateNum = ones(size(GranuleId)).*DateNum; 
+  elseif numel(GranuleId) > 1 & numel(DateNum) ~= numel(GranuleId)
+    %no way to match - give up
+    Error = 1;
+    ErrorInfo = 'Unable to match granule numbers with days - use arrays of the same size';
+  end
+
+
   %if granuleId is outside the legit range (-1-240), then add or subtract
   %days as appropriate
-  if GranuleId < 1 | GranuleId > 240;
-    DayShift  = GranuleId./240;
-    Sign      = DayShift/abs(DayShift);
-    if Sign <= 0; DayShift = -ceil(abs(DayShift));
-    else;         DayShift = floor(DayShift);
+  for iG=1:1:numel(GranuleId)
+    if GranuleId(iG) < 1 | GranuleId(iG) > 240;
+      DayShift  = GranuleId(iG)./240;
+      Sign      = DayShift/abs(DayShift);
+      if Sign <= 0; DayShift = -ceil(abs(DayShift));
+      else;         DayShift = floor(DayShift);
+      end
+      DateNum   = DateNum + DayShift;
+      GranuleId(iG) = mod(GranuleId(iG),240) ;
     end
-    DateNum   = DateNum + DayShift;
-    GranuleId = mod(GranuleId,240) ;   
-  end
-  
+  end; clear iG
+
   %parse the inputs, and tidy up
   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
   
   parse(p,DateNum,GranuleId,varargin{:})
   clear CheckNT CheckdT CheckSmooth ExpectedInterpolants CheckDetrendMethod
   
-
   
   %pull out the contents into struct "Inputs", used throughout rest of routine
   Input = p.Results;
@@ -296,19 +311,18 @@ try
   Input = rmfield(Input,'FullDataDir');
   
   
-catch ERR
-  ErrorInfo = getReport( ERR, 'extended', 'hyperlinks', 'on' );
-  Error = 1;
-  return
-end
+% catch ERR
+%   ErrorInfo = getReport( ERR, 'extended', 'hyperlinks', 'on' );
+%   Error = 1;
+%   return
+% end
   
 
 
 
 
-
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% load the file, or check the struct is valid
+%% load the data, or check the struct is valid
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 if numel(fieldnames(Input.InputStruct)) == 0;
@@ -745,70 +759,83 @@ function [Error,Data,FilePath] = get_airs_granule(DataDir,DateNum,GranuleId)
   %and if that doesn't work, giveup 
   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-  %get date and DoY
-  [y,~,~] =datevec(DateNum);
-  dn = date2doy(DateNum);
+  FoundList = zeros(size(GranuleId));
+  StoreStruct = struct();
 
+  %first, find and load any daily-file granules we need
+  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-  %try merged file
-  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+  Days = unique(DateNum);
+  for iDay=1:1:numel(Days)
+    [y,~,~] = datevec(Days(iDay)); dn = date2doy(Days(iDay));
+    FilePath = [DataDir,'/',sprintf('%04d',y),'/airs_',sprintf('%04d',y),'d',sprintf('%03d',dn),'.nc'];
+    if exist(FilePath,'file')
+      DayData = rCDF(FilePath);
+      GranuleList = GranuleId(find(DateNum == Days(iDay)));
+      for iG=1:1:numel(GranuleList)
+        %select the contents of this granule
+        ThisGranule.l1_lat   = permute(squeeze(DayData.l1_lat(  GranuleList(iG),:,:  )),[2,1]);
+        ThisGranule.l1_lon   = permute(squeeze(DayData.l1_lon(  GranuleList(iG),:,:  )),[2,1]);
+        ThisGranule.l1_time  = permute(squeeze(DayData.l1_time( GranuleList(iG),:,:  )),[2,1]);
+        ThisGranule.ret_temp = permute(squeeze(DayData.ret_temp(GranuleList(iG),:,:,:)),[3,2,1]);
+        ThisGranule.ret_z    = DayData.ret_z;
+        ThisGranule.FilePath{1} = FilePath;
+        StoreStruct.(['d',num2str(Days(iDay))]).(['g',num2str(GranuleList(iG))]) = ThisGranule;
+        FoundList(DateNum == Days(iDay) & GranuleId == GranuleList(iG) ) =1;
+      end
+      clear DayData GranuleList ThisGranule iG
+    end
+  end; clear Days iDay y dn FilePath 
 
-  FilePath = [DataDir,'/',sprintf('%04d',y),'/airs_',sprintf('%04d',y),'d',sprintf('%03d',dn),'.nc']
-  if exist(FilePath,'file')
+  %now, find any granule-file granules we need
+  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-    %load and extract what we need, then return
-    Merged = rCDF(FilePath);
-    Merged.l1_lat   = permute(squeeze(Merged.l1_lat(  GranuleId,:,:  )),[2,1]);
-    Merged.l1_lon   = permute(squeeze(Merged.l1_lon(  GranuleId,:,:  )),[2,1]);
-    Merged.l1_time  = permute(squeeze(Merged.l1_time( GranuleId,:,:  )),[2,1]);
-    Merged.ret_temp = permute(squeeze(Merged.ret_temp(GranuleId,:,:,:)),[3,2,1]);
+  for iG=1:1:numel(FoundList)
+    if FoundList(iG) == 0
 
-    Data = Merged; clear Merged
+      %try and find this file
+      [y,~,~] = datevec(DateNum(iG));dn = date2doy(DateNum(iG));
+      FilePath = [DataDir,'/',sprintf('%04d',y),'/',sprintf('%03d',dn),'/', ...
+                 'airs_',sprintf('%04d',y),'_',sprintf('%03d',dn),'_',sprintf('%03d',GranuleId(iG)),'.nc'];
+      if exist(FilePath,'file')
+        StoreStruct.(['d',num2str(DateNum(iG))]).(['g',num2str(GranuleId(iG))]) = cjw_readnetCDF(FilePath);
+        StoreStruct.(['d',num2str(DateNum(iG))]).(['g',num2str(GranuleId(iG))]).FilePath{1} = FilePath;
+        FoundList(iG) = 1;
+      end
+    end
+  end
+  clear iG y dn FilePath
 
-    Error = 0;
-    return
+  %Ok. If we missed any granules, this is a failure. Give up. 
+  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+  if sum(FoundList) ~= numel(FoundList)
+    Error = 1;
+    Data = struct();
   end
 
-  %try granulewise format
-  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+  %otherwise, stitch them all together
+  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-  FilePath = [DataDir,'/',sprintf('%04d',y),'/',sprintf('%03d',dn),'/', ...
-                 'airs_',sprintf('%04d',y),'_',sprintf('%03d',dn),'_',sprintf('%03d',GranuleId),'.nc']
-  if exist(FilePath,'file')
 
-    %load and extract what we need, then return
-    Data = cjw_readnetCDF(FilePath);
-    Error = 0;
-    return
+  for iG=1:1:numel(GranuleId)
+  
+    if iG == 1;
+      Data = StoreStruct.(['d',num2str(DateNum(iG))]).(['g',num2str(GranuleId(iG))]);
+    else
+      ToAdd = StoreStruct.(['d',num2str(DateNum(iG))]).(['g',num2str(GranuleId(iG))]);
+      Data.l1_lat   = cat(2,Data.l1_lat,  ToAdd.l1_lat);
+      Data.l1_lon   = cat(2,Data.l1_lon,  ToAdd.l1_lon);
+      Data.l1_time  = cat(2,Data.l1_time, ToAdd.l1_time);
+      Data.ret_temp = cat(3,Data.ret_temp,ToAdd.ret_temp);  
+      Data.FilePath{end+1} = ToAdd.FilePath;
+    end
   end
 
-  %otherwise, we are failures and we should be punished for it
-  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+  %and we're done
+  FilePath = Data.FilePath;
+  Error = 0;
 
-  Error = 1;
-  Data = struct();
-  return
-
-
-
-
-
-% % % 
-% % % 
-% % % 
-% % % % airs_2010d143.nc
-% % % 
-% % % 
-% % %   FilePath = [DataDir,'/',sprintf('%04d',y),'/',sprintf('%03d',dn),'/', ...
-% % %               'airs_',sprintf('%04d',y),'_',sprintf('%03d',dn),'_',sprintf('%03d',GranuleId),'.nc']
-% % %   stop
-% % % 
-% % %   if ~exist(FilePath,'file'); Error = 1; Data = struct(); return;
-% % %   else
-% % % 
-% % %   end
-% % % 
-% % % 
 
 return
 
