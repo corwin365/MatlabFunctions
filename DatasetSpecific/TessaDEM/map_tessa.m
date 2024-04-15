@@ -64,7 +64,7 @@ parse(p,LonRange,LatRange,varargin{:})
 %work out the unique tiles we need
 LonTiles = floor(min(LonRange)):1:ceil(max(LonRange));
 LatTiles = floor(min(LatRange)):1:ceil(max(LatRange));
-[LonTiles,LatTiles] = meshgrid(LonTiles,LatTiles);
+[LonTiles,LatTiles] = ndgrid(LonTiles,LatTiles);
 TileList(1,:) = LonTiles(:);
 TileList(2,:) = LatTiles(:);
 
@@ -81,7 +81,7 @@ Alt = NaN(numel(LonScale),numel(LatScale));
 if p.Results.TileScript == true;
 
   %generate the script
-  TileScript = "scp -OT USERNAME@eepc-0184.bath.ac.uk:""" ;
+  TileScript = "scp USERNAME@eepc-0184.bath.ac.uk:""" ;
   DataDir = "/data1/topography/tessaDEM/raw/";
   
   for iTile=1:1:size(TileList,2)
@@ -124,7 +124,9 @@ for iTile=1:1:numel(LonTiles)
   jdx = inrange(LatScale,minmax(Lat));
   [idx,jdx] = ndgrid(idx,jdx);
   xi = LonScale(idx); yi = LatScale(jdx);
+  warning off  %getting lot sof warnngs about meshgrid being inefficient, WHICH I'M NOT USING
   zz = I(xi,yi);
+  warning on
 
   %store
   for iPoint=1:1:numel(idx); Alt(idx(iPoint),jdx(iPoint)) = zz(iPoint); end
