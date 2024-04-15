@@ -81,7 +81,7 @@ Alt = NaN(numel(LonScale),numel(LatScale));
 if p.Results.TileScript == true;
 
   %generate the script
-  TileScript = "scp USERNAME@eepc-0184.bath.ac.uk:""" ;
+  TileScript = "scp -T USERNAME@eepc-0184.bath.ac.uk:""" ;
   DataDir = "/data1/topography/tessaDEM/raw/";
   
   for iTile=1:1:size(TileList,2)
