@@ -140,7 +140,7 @@ end
 if p.Results.ETFill == true
 
   %find the empty regions
-  Empty = find(isnan(Alt));% | Alt == 0);
+  Empty = find(isnan(Alt) | Alt == 0);
   if numel(Empty) == 0; return; end %we already have all the points!
 
   %what points do we need?
@@ -151,7 +151,8 @@ if p.Results.ETFill == true
   ET = topo_v2(minmax(ETLons)+[-0.1,0.1],minmax(ETLats)+[-0.1,0.1]);
   
   %generate interpolant, and fill those gaps
-  I = griddedInterpolant(ET.lons',ET.lats',ET.elev');
+  ET.lons = ET.lons'; ET.lats = ET.lats'; ET.elev = ET.elev';
+  I = griddedInterpolant(ET.lons,ET.lats,ET.elev);
   Alt(Empty) = I(ETLons,ETLats).*1000; %different units
 
 end
