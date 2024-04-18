@@ -157,3 +157,16 @@ if p.Results.ETFill == true
 
 end
 
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% functions
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+function MinMax = minmax(Array)
+  MinMax = [nanmin(Array(:)),nanmax(Array(:))];
+end
+
+function InRange = inrange(Array,MinMax,NoEnds)
+  InRange = find(Array >  min(MinMax) & Array <  max(MinMax));
+end
+
