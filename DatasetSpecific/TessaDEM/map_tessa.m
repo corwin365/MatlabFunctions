@@ -1,4 +1,4 @@
-function [Alt,LonScale,LatScale,TileScript] = map_tessa(LonRange,LatRange,varargin)
+function [Alt,LonPoints,LatPoints,TileScript] = map_tessa(LonPoints,LatPoints,varargin)
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %function to generate a map of a region using TESSA-DEM data
@@ -9,20 +9,19 @@ function [Alt,LonScale,LatScale,TileScript] = map_tessa(LonRange,LatRange,vararg
 %
 %Required inputs:
 %
-%  LonRange - range of longitudes required, in -180 to +180 format 
-%  LatRange - range of latitudes required, in -90 to +90 format
+%  LonRange - longitudes required, in -180 to +180 format 
+%  LatRange - latitudes required, in -90 to +90 format
 %
 %Optional Inputs:
 %
 %  ETFill - default true - fill polar regions without coverage with 0.1 degree easyTopo data (requires topo_V2.m)
 %  DataDir - default [LocalDataDir,'/topography/tessaDEM/raw/'] - path to TESSA tiles
 %  TileScript - default false - return an SCP command to get the ftiles rather than the tiles themselves
-%  Resolution - default [1/112e3*30,1/112e3*30] - output resolution in [lon, lat] in degrees
 %
 %Outputs:
 %  Alt - grid of altitudes on requested resolution
-%  LonScale - longitude axis for this grid
-%  LatScale - latitude axis for this grid
+%  LonPoints - longitudes of the output
+%  LatPoints - latitudes  of the output
 %  TileScript - SCP script to acquire desired tiles
 %
 %
@@ -42,37 +41,35 @@ p = inputParser;
 %%%%%%%%%%%%%%%%%%%%%%
 
 %lat/lon, required
-addRequired(p,'LonRange',@(x) validateattributes(x,{'numeric'},{'>=',-180,'<=',180}))
-addRequired(p,'LatRange',@(x) validateattributes(x,{'numeric'},{'>=', -90,'<=', 90}))
+addRequired(p,'LonPoints',@(x) validateattributes(x,{'numeric'},{'>=',-180,'<=',180}))
+addRequired(p,'LatPoints',@(x) validateattributes(x,{'numeric'},{'>=', -90,'<=', 90,'size',size(LonPoints)}))
 
 %optional flags
 addParameter(p,'ETFill',   true,@islogical); %use 0.1 easyTopo topography to fill polar regions
 addParameter(p,'TileScript',false,@islogical); %if this is set to true, function just returns a lsit of required tiles for this map
 
 %optional settings
-addParameter(p,'DataDir',[LocalDataDir,'/topography/tessaDEM/raw/'],@ischar); %path to data
+addParameter(p,'DataDir',[LocalDataDir,'/topography/tessa/'],@ischar); %path to data
 addParameter(p,'Resolution',[1/112e3*30,1/112e3*30],@isnumeric); %defaults to 30m resolution, i.e. dataset limit
 
 %done - parse inputs
-parse(p,LonRange,LatRange,varargin{:})
+parse(p,LonPoints,LatPoints,varargin{:})
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% preprocessing
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
+%flatten the lats and lons. We'll reshape them back at the end
+
+
 
 %work out the unique tiles we need
-LonTiles = floor(min(LonRange)):1:ceil(max(LonRange));
-LatTiles = floor(min(LatRange)):1:ceil(max(LatRange));
-[LonTiles,LatTiles] = ndgrid(LonTiles,LatTiles);
-TileList(1,:) = LonTiles(:);
-TileList(2,:) = LatTiles(:);
+TileList(1,:) = floor(LonPoints(:));
+TileList(2,:) = floor(LatPoints(:));
+TileList = unique(TileList','rows')';
 
 %work out the final product grid
-LonScale = min(LonRange):p.Results.Resolution(1):max(LonRange);
-LatScale = min(LatRange):p.Results.Resolution(2):max(LatRange);
-Alt = NaN(numel(LonScale),numel(LatScale));
-
+Alt = NaN(size(LonPoints));
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% if we just want a dwnload list of files, generate that
@@ -82,7 +79,7 @@ if p.Results.TileScript == true;
 
   %generate the script
   TileScript = "scp -T USERNAME@eepc-0184.bath.ac.uk:""" ;
-  DataDir = "/data1/topography/tessaDEM/raw/";
+  DataDir = "/data1/topography/tessa/";
   
   for iTile=1:1:size(TileList,2)
     FileName = num2str(TileList(2,iTile))+"_"+num2str(TileList(1,iTile));
@@ -111,27 +108,52 @@ end
 %% for each tile, load and put on the final grid
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-for iTile=1:1:numel(LonTiles)
+
+for iTile=1:1:size(TileList,2)
 
   %load tile
-  [Z,Lon,Lat] = load_tessaDEM_tile(LonTiles(iTile),LatTiles(iTile),'DataDir',p.Results.DataDir,'ETFill',p.Results.ETFill);
+  [Z,Lon,Lat,Error] = load_tessaDEM_tile(TileList(1,iTile),TileList(2,iTile),'DataDir',p.Results.DataDir);
+
+  %make sure we actually got a tile 
+  if Error ~= 0; continue; end
 
   %create an interpolant from the data
-  I = griddedInterpolant({Lon,Lat},double(Z));
+  %disable extrapolation disabled so it will only do values for this granule
+  I = griddedInterpolant({Lon,Lat},double(Z),'linear','none');
+  clear Z Lon Lat
 
-  %create an output grid, and interpolate
-  idx = inrange(LonScale,minmax(Lon));
-  jdx = inrange(LatScale,minmax(Lat));
-  [idx,jdx] = ndgrid(idx,jdx);
-  xi = LonScale(idx); yi = LatScale(jdx);
-  warning off  %getting lot sof warnngs about meshgrid being inefficient, WHICH I'M NOT USING
-  zz = I(xi,yi);
+  %interpolate onto the full set of points
+  warning off %gives a warning about data format which is optimisation only and not relevant
+  Vals = I(LonPoints,LatPoints);
   warning on
 
-  %store
-  for iPoint=1:1:numel(idx); Alt(idx(iPoint),jdx(iPoint)) = zz(iPoint); end
-
-
+  %store the ones that work
+  Alt(~isnan(Vals)) = Vals(~isnan(Vals));
 
 
 end
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% fill gaps with easyTopo lower-res data?
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+if p.Results.ETFill == true
+
+  %find the empty regions
+  Empty = find(isnan(Alt) | Alt == 0);
+  if numel(Empty) == 0; return; end %we already have all the points!
+
+  %what points do we need?
+  ETLons = LonPoints(Empty);
+  ETLats = LatPoints(Empty);
+
+  %load the easyTopo data
+  minmax(ETLats)+[-0.1,0.1]
+  ET = topo_v2(minmax(ETLons)+[-0.1,0.1],minmax(ETLats)+[-0.1,0.1]);
+  
+  %generate interpolant, and fill those gaps
+  I = griddedInterpolant(ET.lons',ET.lats',ET.elev');
+  Alt(Empty) = I(ETLons,ETLats).*1000; %different units
+
+end
+

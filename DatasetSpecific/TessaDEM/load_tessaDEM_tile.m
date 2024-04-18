@@ -39,7 +39,7 @@ addRequired(p,'Lat',@(x) validateattributes(x,{'numeric'},{'>=', -90,'<=', 90}))
 
 %other optional
 addParameter(p,'DataDir',[LocalDataDir,'/topography/tessa/'],@ischar);
-addParameter(p,'ETFill',true,@islogical);
+% % % addParameter(p,'ETFill',true,@islogical);  %option removed and moved upstream
 
 %done - parse inputs
 parse(p,Lon,Lat,varargin{:})
@@ -81,29 +81,32 @@ if exist(FileName,'file')
   Error = 0;
   return
 
-elseif p.Results.ETFill == true
-
-  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-  %% no tile: use easyTopo to fill the gap 
-  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-  if Lat > 84 | Lat < -80;
-    %we are outside TESSA coverage - use easyTopo 0.1 degree
-    ET = topo_v2(Lon+[0,1],Lat+[0,1]);
-    Alt = fliplr(ET.elev);
-    LonScale = squeeze(ET.lons(1,:));
-    LatScale = squeeze(ET.lats(:,1));
-    clear ET
-  else
-    %open ocean - all-zero
-    Alt = [0,0;0,0];
-    LonScale = Lon+[0,1];
-    LatScale = Lat+[0,1];
-
-  end
-
-  Error = 1;
-  return
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% % %following option removed and moved upstream
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% % elseif p.Results.ETFill == true
+% % 
+% %   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% %   %% no tile: use easyTopo to fill the gap 
+% %   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% % 
+% %   if Lat > 84 | Lat < -80;
+% %     %we are outside TESSA coverage - use easyTopo 0.1 degree
+% %     ET = topo_v2(Lon+[0,1],Lat+[0,1]);
+% %     Alt = fliplr(ET.elev);
+% %     LonScale = squeeze(ET.lons(1,:));
+% %     LatScale = squeeze(ET.lats(:,1));
+% %     clear ET
+% %   else
+% %     %open ocean - all-zero
+% %     Alt = [0,0;0,0];
+% %     LonScale = Lon+[0,1];
+% %     LatScale = Lat+[0,1];
+% % 
+% %   end
+% % 
+% %   Error = 1;
+% %   return
 
 else
 
