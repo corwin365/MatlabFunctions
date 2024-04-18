@@ -140,7 +140,7 @@ end
 if p.Results.ETFill == true
 
   %find the empty regions
-  Empty = find(isnan(Alt) | Alt == 0);
+  Empty = find(isnan(Alt));% | Alt == 0);
   if numel(Empty) == 0; return; end %we already have all the points!
 
   %what points do we need?
@@ -148,7 +148,6 @@ if p.Results.ETFill == true
   ETLats = LatPoints(Empty);
 
   %load the easyTopo data
-  minmax(ETLats)+[-0.1,0.1]
   ET = topo_v2(minmax(ETLons)+[-0.1,0.1],minmax(ETLats)+[-0.1,0.1]);
   
   %generate interpolant, and fill those gaps
@@ -163,10 +162,10 @@ end
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 function MinMax = minmax(Array)
-  MinMax = [nanmin(Array(:)),nanmax(Array(:))];
-end
+MinMax = [nanmin(Array(:)),nanmax(Array(:))];
+return
 
 function InRange = inrange(Array,MinMax,NoEnds)
-  InRange = find(Array >  min(MinMax) & Array <  max(MinMax));
-end
+InRange = find(Array >  min(MinMax) & Array <  max(MinMax));
+return
 
