@@ -46,6 +46,7 @@ addRequired(p,'LatPoints',@(x) validateattributes(x,{'numeric'},{'>=', -90,'<=',
 
 %optional flags
 addParameter(p,'ETFill',   true,@islogical); %use 0.1 easyTopo topography to fill polar regions
+addParameter(p,'ETPath',   [LocalDataDir,'/topography/easy_tenth_degree_topography/easy_topo.mat'],@ischar); %path to easyTopo
 addParameter(p,'TileScript',false,@islogical); %if this is set to true, function just returns a lsit of required tiles for this map
 
 %optional settings
