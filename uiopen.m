@@ -50,11 +50,13 @@ function uiopen(type,direct)
 %
 %   See also UIGETFILE, UIPUTFILE, OPEN, UIIMPORT.
 
-%   Copyright 1984-2020 The MathWorks, Inc.
+%   Copyright 1984-2023 The MathWorks, Inc.
 
-
-import matlab.internal.lang.capability.Capability;
-Capability.require(Capability.Swing);
+% Check for Swing capability if web UI is disabled
+import matlab.internal.capability.Capability;
+if ~matlab.ui.internal.dialog.FileDialogHelper.isWebUI()
+    Capability.require(Capability.Swing);
+end
 
 if nargin > 0
     type = convertStringsToChars(type);
@@ -75,56 +77,16 @@ end
 if direct
     fn = type;
 else
-    % Error if MATLAB is running in no JVM mode.
-    warnfiguredialog('uiopen');
+    if ~matlab.ui.internal.dialog.FileDialogHelper.isWebUI()
+        % Error if MATLAB is running in no JVM mode.
+        warnfiguredialog('uiopen');
+    end
     if isempty(type)
         % Do not provide a filter list. UIGETFILE called below will pick up all
         % the filters available in the MATLAB installation automatically.
         filterList = '';
     else
-        allML = getPatternAndDescription(com.mathworks.mwswing.FileExtensionFilterUtils.getMatlabProductFilter());
-        switch(lower(type))
-            case 'matlab'
-                filterList = [
-                    allML; ...
-                    getPatternAndDescription(com.mathworks.mwswing.FileExtensionFilterUtils.getMatlabFileFilter()); ...
-                    getPatternAndDescription(com.mathworks.mwswing.FileExtensionFilterUtils.getFigFileFilter()); ...
-                    {'*.*',   getString(message('MATLAB:uistring:uiopen:AllFiles'))}
-                    ];
-            case 'load'
-                filterList = [
-                    getPatternAndDescription(com.mathworks.mwswing.FileExtensionFilterUtils.getMatFileFilter()); ...
-                    allML; ...
-                    {'*.*',   getString(message('MATLAB:uistring:uiopen:AllFiles'))}
-                    ];
-            case 'figure'
-                filterList = [
-                    getPatternAndDescription(com.mathworks.mwswing.FileExtensionFilterUtils.getFigFileFilter()); ...
-                    allML; ...
-                    {'*.*',   getString(message('MATLAB:uistring:uiopen:AllFiles'))}
-                    ];
-            case 'simulink'
-                % Simulink filters are the only ones hardcoded here.
-                % This should be changed this in future
-                filterList = [
-                    {'*.mdl;*.slx', getString(message('MATLAB:uistring:uiopen:ModelFiles'))}; ...
-                    allML; ...
-                    {'*.*',   getString(message('MATLAB:uistring:uiopen:AllFiles'))}
-                    ];
-            case 'editor'
-                % We should be deprecating this usage.
-                % uiopen('editor') is an unused option and does not scale well to new file extenstions
-                % This option primarily used to open a file in the 
-                % MATLAB Editor using the EDIT function    
-                % According to the documentation we need to remove .mat, .fig, .slx from the list
-                allMLWithoutBinary = {regexprep(allML{1}, {'*.slx;','*.mat;','*.fig;','*.mlapp;','*.mlappinstall;'}, ''), allML{2}};
-                filterList = [
-                    allMLWithoutBinary;...
-                    {'*.*',   getString(message('MATLAB:uistring:uiopen:AllFiles'))}
-                    ];
-            otherwise
-                filterList = type;
-        end
+        filterList = matlab.ui.internal.dialog.UIOpenHelper.getFilterList(type);
     end
     
     % Is it a .APP or .KEY directory on the Mac?
@@ -148,19 +110,18 @@ try
     if strcmpi(type,'editor')
         edit(fn);
     else
-
         % Is it a MAT-file?
         [~, ~, ext] = fileparts(fn);
         if strcmpi(ext, '.mat')
             quotedFile = ['''' strrep(fn, '''', '''''') ''''];
             evalin('caller', ['load(' quotedFile ');']);
-            setStatusBar(~isempty(whos('-file', fn)));
+            matlab.ui.internal.dialog.UIOpenHelper.setStatusBar(~isempty(whos('-file', fn)));
             return;
         elseif strcmpi(ext, '.nc') | strcmpi(ext, '.nc4')
-        %is it a netCDF file?
-            quotedFile = ['''' strrep(fn, '''', '''''') ''''];
-            evalin('caller', ['netCDF = rCDF(' quotedFile ');']);
-            return;
+          %is it a netCDF file?
+          quotedFile = ['''' strrep(fn, '''', '''''') ''''];
+          evalin('caller', ['netCDF = rCDF(' quotedFile ');']);
+          return;
         end
         
         sans = [];
@@ -181,53 +142,14 @@ try
             else
                 assignin('caller','ans',vars);
             end
-            setStatusBar(status);
+            matlab.ui.internal.dialog.UIOpenHelper.setStatusBar(status);
         end
     end
 catch ex
+    err = ex.message;
     % Strip hyperlinks since errordlg does not support them
-    err = ex.getReport('basic','hyperlinks','off');
-    try 
-        err = regexprep(err, '<a\s+href\s*=\s*"[^"]*"[^>]*>(.*?)</a>','$1');
-    catch ME %#ok<NASGU>
-        % Just try removing hyperlinks that are left over
-    end
+    err = regexprep(err, '<a\s+href\s*=\s*"[^"]*"[^>]*>(.*?)</a>','$1');
     errordlg(err);
 end
 
-end
-
-function setStatusBar(varsCreated)
-
-if varsCreated
-    theMessage = getString(message('MATLAB:uistring:uiopen:VariablesCreatedInCurrentWorkspace'));
-else
-    theMessage = getString(message('MATLAB:uistring:uiopen:NoVariablesCreatedInCurrentWorkspace'));
-end
-
-% The following class reference is undocumented and
-% unsupported, and may change at any time.
-dt = javaMethod('getInstance', 'com.mathworks.mde.desk.MLDesktop');
-if dt.hasMainFrame
-    dt.setStatusText(theMessage);
-else
-    disp(theMessage);
-end
-
-end
-
-function filters = getPatternAndDescription(javaFileExtensionFilters)
-filters = cell(1,2);
-
-% PATTERNS
-pattern = javaFileExtensionFilters.getPatterns;
-if length(pattern)>1
-    cellPatterns = arrayfun(@(x) [char(x) ';'], pattern,'UniformOutput',false);
-    filters{1,1} = [cellPatterns{:}];
-else
-    filters{1,1} = char(pattern);
-end
-
-% DESCRIPTIONS
-filters{1,2} = char(javaFileExtensionFilters.getDescription);
 end

@@ -38,7 +38,7 @@ Topo = load([Settings.DataDir,'/easy_tenth_degree_topography/easy_topo.mat']);
 Topo = Topo.topo;
 
 %modifications
-Topo.elev(Topo.elev < -5) = -5; %oceans are flat
+% Topo.elev(Topo.elev < -5) = -5; %oceans are flat
 Topo.elev = Topo.elev./1000; %scale to km
 
 
@@ -161,15 +161,17 @@ else
 end
 
 %coasts
-Coasts2 = Coasts(1:2); %this will be ignored, is just to initialise the structure correctly
-k = 0;
-for iC=1:1:numel(Coasts)
-  if max(Coasts(iC).Lon) < min(LonBox); continue; end
-  if min(Coasts(iC).Lon) > max(LonBox); continue; end
-  k = k+1;
-  Coasts2(k) = Coasts(iC);
+if numel(Coasts) > 2;
+  Coasts2 = Coasts(1:2); %this will be ignored, is just to initialise the structure correctly
+  k = 0;
+  for iC=1:1:numel(Coasts)
+    if max(Coasts(iC).Lon) < min(LonBox); continue; end
+    if min(Coasts(iC).Lon) > max(LonBox); continue; end
+    k = k+1;
+    Coasts2(k) = Coasts(iC);
+  end
+  Coasts = Coasts2;
 end
-Coasts = Coasts2;
 
 
 
