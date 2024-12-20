@@ -86,6 +86,15 @@ clear IsPositive p varargin IsPositiveInteger
 %scale FWHMs to stdevs
 Settings.Std = Settings.FWHM./2.355;
 
+%drop any height levels which are all-NaN (this happens often with GNSS files loaded using get_limbsounder() defaults)
+%we'll need to put these back at the end to keep the input matching the output
+OriginalLevels = 1:1:numel(Settings.ZScale);
+UsedLevels = find(~isnan(Settings.ZScale));
+if numel(UsedLevels) ~= numel(OriginalLevels)
+  Settings.ZScale = Settings.ZScale(UsedLevels);
+  Data = reduce_struct(Data,UsedLevels,{},2);
+end
+
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% set up fitting parameters
@@ -154,7 +163,7 @@ for iTime=1:1:numel(Settings.TimeScale)
       T = Working.Temp(idx); T = T(~isnan(T));
       if numel(T) < Settings.MinPoints; clear w idx T w_alt; continue; end
 
-      %we do! Do it. Turn warnigns off, they're going to happen often but we're going to handle them here.
+      %we do! Do it. Turn warnings off, they're going to happen often but we're going to handle them here.
       warning off
       [~,F] = nph_sinefit(Working.Lon(idx),Working.Temp(idx),(360./Settings.PWModes),'weights',w(idx));
       %if the fit had too few points, then throw it away
@@ -249,16 +258,16 @@ for iTime=1:1:numel(Settings.TimeScale)-1
   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
   Samples.walt = interp1(linspace(avg_walt(1),avg_walt(end),numel(avg_walt)), ...
-                                 1:1:numel(avg_walt), ...
-                                 Data.Alt(idx,:));
+                         1:1:numel(avg_walt), ...
+                         Data.Alt(idx,:));
 
   Samples.wlat = interp1(linspace(avg_wlat(1),avg_wlat(end),numel(avg_wlat)), ...
-                                 1:1:numel(avg_wlat), ...
-                                 Data.Lat(idx,:));
+                         1:1:numel(avg_wlat), ...
+                         Data.Lat(idx,:));
 
   Samples.wtim = interp1(linspace(avg_wtim(1),avg_wtim(end),numel(avg_wtim)), ...
-                                 1:1:numel(avg_wtim), ...
-                                 Data.Time(idx,:));  
+                         1:1:numel(avg_wtim), ...
+                         Data.Time(idx,:));  
 
   %and hence reconstruct the PWs
   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -285,7 +294,7 @@ end; clear iTime Samples avg_walt avg_wlat avg_wtim
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% finally: how much do we trust the results?
+%% how much do we trust the results?
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 %create an array telling us how much to trust the results
@@ -309,6 +318,38 @@ clear TimeMax TimeMin AltMax AltMin LatMax LatMin
 
 
 OUT.Trust = Trust; clear Trust
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% finally, if we dropped some levels, put them all back as NaNs
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+if numel(UsedLevels) ~= numel(OriginalLevels)
+
+  %get list of variables
+  Vars = fieldnames(OUT);
+
+  %create a new output struct
+  sz = size(OUT.Lat); sz(2) = numel(OriginalLevels);
+  OUT2 = spawn_uniform_struct(Vars,sz);
+  OUT2.Temp_PW  = repmat(OUT2.Temp_PW,[1,1,numel(Settings.PWModes)]);
+
+  %copy over the standard variables
+  for iVar=1:1:numel(Vars)
+    if     strcmp(Vars{iVar},'Note');    OUT2.Note                    = OUT.Note;
+    elseif strcmp(Vars{iVar},'Temp_PW'); OUT2.Temp_PW(:,UsedLevels,:) = OUT.Temp_PW;
+    else
+      a = OUT2.(Vars{iVar});
+      a(:,UsedLevels) = OUT.( Vars{iVar});
+      OUT2.(Vars{iVar}) = a;
+    end
+  end; 
+  OUT = OUT2;
+  clear OUT2 sz iVar Vars
+
+end; clear UsedLevels OriginalLevels
+
 
 
 return
