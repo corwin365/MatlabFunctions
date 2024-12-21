@@ -60,10 +60,6 @@ parse(p,LonPoints,LatPoints,varargin{:})
 %% preprocessing
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-%flatten the lats and lons. We'll reshape them back at the end
-
-
-
 %work out the unique tiles we need
 TileList(1,:) = floor(LonPoints(:));
 TileList(2,:) = floor(LatPoints(:));
@@ -158,19 +154,8 @@ if p.Results.ETFill == true
 
 end
 
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% functions
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-function MinMax = minmax(Array)
-MinMax = [nanmin(Array(:)),nanmax(Array(:))];
 return
-
-function InRange = inrange(Array,MinMax,NoEnds)
-InRange = find(Array >  min(MinMax) & Array <  max(MinMax));
-return
-
+end
 
 
 function [Alt,LonScale,LatScale,Error] = load_tessaDEM_tile(Lon,Lat,varargin)
@@ -272,3 +257,4 @@ end
 
 
 return
+end

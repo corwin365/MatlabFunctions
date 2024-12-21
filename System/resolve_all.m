@@ -141,7 +141,7 @@ if Settings.Action == 3;
       fclose(fid);
 
       %get some properties
-      date = dir(FunctionList{iFile}).date
+      date = dir(FunctionList{iFile}).date;
       [~,name,ext] = fileparts(FunctionList{iFile});
 
       %add a few lines padding
