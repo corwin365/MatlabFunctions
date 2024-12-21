@@ -1,4 +1,4 @@
-function FunctionList = resolve_all_v2(MainFunction,varargin)
+function FunctionList = resolve_all(MainFunction,varargin)
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %find all functions needed by a routine and either:
@@ -152,7 +152,7 @@ if Settings.Action == 3;
     %finally, write the new file out
     disp(['All child functions of ',MainFunction,' merged'])
     writelines(Merged,Settings.OutFile)
-    warning('Some merged functions may need ''end'' adding manually. These should be highlighted by the error finder in the Matlab editor')
+    warning('Some merged functions may need ''end'' adding manually to close them. These should be highlighted by the error finder in the Matlab editor')
 
 
   end
