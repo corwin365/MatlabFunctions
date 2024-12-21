@@ -68,6 +68,9 @@ X = padreplicate(X,padSize);
 % perform the convolution
 Y = convn(X,smooth,'valid');
 
+
+return; end
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 function h = ndgaussian(siz,std)
@@ -91,6 +94,9 @@ std = repmat(std,2*siz+1);
 
 h = exp(-sum((grid.*grid)./(2*std.*std),ndim+1));
 h = h/sum(h(:));
+
+
+return; end
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -117,6 +123,9 @@ for i=1:nout,
   argout = cat(nin+1,argout,x);% Concatenate to the output 
 end
 
+return; end
+
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 function b=padreplicate(a, padSize)
@@ -130,4 +139,4 @@ for k = 1:numDims
 end
 
 b = a(idx{:});
-
+return; end

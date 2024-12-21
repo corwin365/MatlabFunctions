@@ -140,8 +140,25 @@ if Settings.Action == 3;
       Text = Text{1};
       fclose(fid);
 
+      %get some properties
+      date = dir(FunctionList{iFile}).date
+      [~,name,ext] = fileparts(FunctionList{iFile});
+
       %add a few lines padding
       for iX=1:1:10; Merged{end+1} = ' '; end
+
+      %add a label
+      Merged{end+1} = '%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%';
+      Merged{end+1} = '%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%';
+      Merged{end+1} = '%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%';
+      Merged{end+1} = ['%--> AUTOMERGED: '];
+      Merged{end+1} = ['%-----> ',name,ext];
+      Merged{end+1} = ['%-----> Included version last modified:',date];
+      Merged{end+1} = '%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%';
+      Merged{end+1} = '%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%';
+      Merged{end+1} = '%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%';
+      for iX=1:1:2; Merged{end+1} = ' '; end
+      
 
       %then add the text we just loaded
       Merged = [Merged;Text];
