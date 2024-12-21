@@ -49,3 +49,6 @@ doy(:) = doyRow;
 if flagFrac
     fraction(:) = fracRow;
 end
+
+return
+end

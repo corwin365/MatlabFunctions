@@ -22,11 +22,11 @@ function FileContents = rCDF(FilePath,Method)
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 %set default method
-if ~exist('Method'); Method = 0; end
+if ~exist('Method','var'); Method = 0; end
 
 
 
-if Method == 0 | Method == 2;
+if Method == 0 || Method == 2;
 
   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
   %based around Neil Hindley's nph_getnet()
@@ -73,7 +73,7 @@ elseif Method == 1
   [~,NumVars,~,~] = netcdf.inq(NetCdfID);
   
   for iVar=1:1:NumVars;
-    [VarName,xtype,dimids,natts] = netcdf.inqVar(NetCdfID,iVar-1);
+    VarName = netcdf.inqVar(NetCdfID,iVar-1);
     
     
     %remove characters which should be in the variable names
@@ -102,4 +102,7 @@ elseif Method == 1
   FileContents.MetaData = ncinfo(FilePath);  
   netcdf.close(NetCdfID); % done
   
+end
+
+return
 end

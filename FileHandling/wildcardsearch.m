@@ -69,6 +69,10 @@ regexpstr=[beginstr strrep(regexptranslate('wildcard', searchstr), pathsep, [end
 % Search
 result = regexpdir(rootdir, regexpstr, true);
 
+
+return
+end
+
 %==========================================================================
 % Changelog:
 % 03-09-2007 v1.00 (BCH)  Initial release
@@ -226,3 +230,5 @@ else
   varargout{1} = D;
 end;
 
+return
+end

@@ -12,3 +12,4 @@ dn = floor(date2doy(DateNum));
 FormattedString = [sprintf('%04d',y),'d',sprintf('%03d',dn)];
 
 return
+end

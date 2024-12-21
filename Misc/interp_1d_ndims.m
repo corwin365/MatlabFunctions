@@ -21,7 +21,7 @@ if nargin < 5; varargin = {}; end    %make sure we have a varargin for the call 
 [y,a,b] = expose_dim(y,Dim);
 
 %handle 1d vectors being weird.
-if ndims(x) == 2 && size(x,1) == 1; x = x'; xi =xi';end
+if ismatrix(x) && size(x,1) == 1; x = x'; xi =xi';end
 
 %interpolate
 yi = interp1(x,y,xi,varargin{:});
@@ -31,3 +31,4 @@ yi = reshape(yi,[size(yi,1),a(2:end)]);
 yi = permute(yi,b);
 
 return
+end
