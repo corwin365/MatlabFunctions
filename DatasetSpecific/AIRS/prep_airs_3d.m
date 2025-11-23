@@ -89,7 +89,6 @@ function [Airs,Spacing,Error,ErrorInfo,MinorErrorInfo] = prep_airs_3d(DateNum,Gr
 %    IASI          (logical, false)  load IASI data instead
 %    NoISCheck     (logical, false)  don't check the validity of an input structure (useful eg for merged multiple granules where the size is wrong)
 %    Python        (logical, false)  Python can't handle recursive structs - if called from there, then remove the MetaData field
-%NOT CURRENTLY WORKING:
 %    NXT           (numeric,    90)  number of cross-track points to interpolate to.
 %    NAT           (numeric,   135)  number of along-track points to interpolate to.
 %    dXT           (numeric,   NaN)  (OVERRIDES NXT) distance between each XT point to interpolate to 
