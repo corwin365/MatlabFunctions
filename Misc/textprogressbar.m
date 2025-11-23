@@ -58,3 +58,5 @@ else
     % Any other unexpected input
     error('Unsupported argument type');
 end
+
+end

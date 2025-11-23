@@ -30,4 +30,4 @@ Rd = 286.9; %Gas constant for dry air
 
 AirDensity = Pressure .* 1e2  ./ (Rd .* Temperature);
 
-
+end

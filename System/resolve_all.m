@@ -39,6 +39,7 @@ clear p varargin
 %get the list
 FunctionList = matlab.codetools.requiredFilesAndProducts(MainFunction);
 
+
 %if that's all we wanted, then return it
 if Settings.Action == 1; return; end
 

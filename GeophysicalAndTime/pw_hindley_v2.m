@@ -1,4 +1,4 @@
-function OUT = pw_hindley_v2(Data,varargin)
+function [OUT,FitData] = pw_hindley_v2(Data,varargin)
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -6,7 +6,8 @@ function OUT = pw_hindley_v2(Data,varargin)
 %
 %Corwin Wright, c.wright@bath.ac.uk, 2024/12/20
 %note that this a direct reimplementation of Neil's older version, no logical changes have been made
-
+%
+%
 %OUTPUTS:
 %
 %   OUT: struct containing the output fields, on a profile x height grid
@@ -14,11 +15,13 @@ function OUT = pw_hindley_v2(Data,varargin)
 %     Lat - latitude (deg)
 %     Lon - longitude (deg)
 %     Alt - altitude (km)
-%     Time - time (Matlab units)
-%     Trust - number of standard deviations from the edge of the data a point was fitted. Higher is better.
-%     Temp_Residual - perturbaiton after PW removal (Kelvin)
+%     Time - time (Matlab units). Must span at least two fitting time units (default unit is days).
+%     Trust - number of FWHMs from the edge of the data a point was fitted. Higher is better.
+%     Temp_Residual - perturbation after PW removal (Kelvin)
 %     Temp_PW - pws fitted, with an additional third dimension of PW mode (K)
 %     Note - a written note.
+%  PWFits: struct containing
+%
 %
 %INPUTS:
 %
@@ -34,7 +37,7 @@ function OUT = pw_hindley_v2(Data,varargin)
 %
 %    VarName         (type,                  default)  description
 %    -----------------------------------------------------------------------------
-%    TimeScale       (real,  all unique dates in data)  time scale for PW fit, i.e. unique periods to compute over
+%    TimeScale       (real,  all unique dates in data)  time scale for PW fit, i.e. unique periods to compute over. THIS MUST BE AT LEAST TWO PERIODS.
 %    ZScale          (real, mean heightscale of input)  height scale for PW fit
 %    LatScale        (real,                  -90:2:90)  lat scale for PW fit
 %    FWHM            (real,                   [4,2,1])  FWHM of fit, in [deg lat, km alt, days time]
@@ -165,6 +168,7 @@ for iTime=1:1:numel(Settings.TimeScale)
 
       %we do! Do it. Turn warnings off, they're going to happen often but we're going to handle them here.
       warning off
+      
       [~,F] = nph_sinefit(Working.Lon(idx),Working.Temp(idx),(360./Settings.PWModes),'weights',w(idx));
       %if the fit had too few points, then throw it away
       if any(regexp(lastwarn,'Matrix is close to singular or badly scaled.')); F = NaN(length(Settings.PWModes),3); end
@@ -191,8 +195,6 @@ for iTime=1:1:numel(Settings.TimeScale)
     end; clear iZ
   end; clear iLat w_lat   
 end; clear iTime InTimeRange Working w_tim ZWeights
-
-
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% now we need to interpolate back to the original grid

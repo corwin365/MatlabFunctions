@@ -3,5 +3,6 @@ Plotting/export_fig/
 Plotting/m_map/
 Plotting/arrow.m
 Plotting/colorGradient.m
+Plotting/plotly
 *.asv
 Plotting/plot_google_map/api_key.mat
