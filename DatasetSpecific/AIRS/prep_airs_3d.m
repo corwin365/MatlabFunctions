@@ -35,7 +35,7 @@ function [Airs,Spacing,Error,ErrorInfo,MinorErrorInfo] = prep_airs_3d(DateNum,Gr
 %outputs:
 %%%%%%%%%%%
 %
-%  Airs:  AIRS data, provided no critical errors hit. Empty struct otherwise.
+%  Airs:  AIRS (or other instrument) data, provided no critical errors hit. Empty struct otherwise.
 %  Spacing: XT, AT and z spacing in km. See Note 1, below.
 %  Error: error state; 0: no error; 1: critical error; 2: minor error
 %  ErrorInfo: critical error details 
@@ -926,7 +926,7 @@ function [Error,Iasi,FilePath] = get_iasi_granule(DataDir,DateNum,GranuleId)
 
       %store
       if ~exist('Store','var'); Store = Iasi;
-      else;                     Store = cat_struct(Store,Iasi,2,{'ret_z'});
+      else;                     Store = cat_struct(Store,Iasi,2,{'ret_z','MetaData'});
       end
       clear Iasi
     end
@@ -941,6 +941,16 @@ function [Error,Iasi,FilePath] = get_iasi_granule(DataDir,DateNum,GranuleId)
   idx = [];
   for iG=1:1:numel(GranuleId); idx = [idx,find(g == GranuleId(iG) & floor(MatlabDate) == DateNum(1))]; end
   Iasi = reduce_struct(Store,idx,{'ret_z','MetaData'},2);
+
+
+  %if we failed, give up
+  if numel(Iasi.l1_lat) == 0
+    Error = 1;
+    Data = struct();
+    FilePath = '';
+    return
+  end
+
 
   %finally, reformat to match AIRS formatting
   Iasi.ret_temp = permute(Iasi.ret_temp,[3,1,2]);
