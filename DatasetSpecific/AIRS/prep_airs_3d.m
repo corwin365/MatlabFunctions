@@ -86,6 +86,7 @@ function [Airs,Spacing,Error,ErrorInfo,MinorErrorInfo] = prep_airs_3d(DateNum,Gr
 %    PreSmooth     (array, [1,1,1])  size of boxcar smoother to pre-apply to the data (after interp, before detrend).
 %    DetrendMethod (numeric,     2)  detrending method to use (2 is faster)
 %    LoadOnly      (logical, false)  load and return data only
+%    IASI          (logical, false)  load IASI data instead
 %    NoISCheck     (logical, false)  don't check the validity of an input structure (useful eg for merged multiple granules where the size is wrong)
 %    Python        (logical, false)  Python can't handle recursive structs - if called from there, then remove the MetaData field
 %NOT CURRENTLY WORKING:
@@ -164,7 +165,7 @@ Spacing = [NaN,NaN,NaN];
 %% general input parsing
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-try
+% try
 
   %create input parser
   %%%%%%%%%%%%%%%%%%%%%%%
@@ -174,15 +175,19 @@ try
   %%%%%%%%%%%%%%%%%%%
   addRequired(p,'DateNum',  @isnumeric);
   addRequired(p,'GranuleId',@isnumeric);
+
   
   %inputs - pseudo-optional (i.e. path to files)
   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-  
+
   %first, check if we have a LocalDataDir function
   if exist(LocalDataDir,'file') == 7;
-    %we have a function. We can use either DataDir or FullDataDir as
-    %optional flags
-    addParameter(p,'RelDataDir',[LocalDataDir,'/AIRS/3d_airs/'],@ischar); %where AIRS data live on my system
+    %we have a function. We can use either DataDir or FullDataDir as optional flags
+    if numel(find(strcmp(varargin,'IASI'))) == 1 & varargin{find(strcmp(varargin,'IASI'))+1} == 1 ;  
+        addParameter(p,'RelDataDir',[LocalDataDir,'/IASI/'],@ischar); %where IASI data live on my system
+    else
+      addParameter(p,'RelDataDir',[LocalDataDir,'/AIRS/3d_airs/'],@ischar); %where AIRS data live on my system
+    end
     addParameter(p,'FullDataDir','notset',                      @ischar); %set this if you don't have a LocalDataDir function. See Headers, Note 1.
   else
     %we do not have a function. FullDataDir is now a required variable
@@ -215,6 +220,7 @@ try
   addParameter(p,'NoDetrend',   'false',@islogical);  %assumes we want to detrend
   addParameter(p,'KeepOldTime', 'false',@islogical);  %assumes we want to discard
   addParameter(p,'DayNightFlag','false',@islogical);  %assumes we want to not compute
+  addParameter(p,'IASI',        'false',@islogical);  %assumes we want AIRS data
   addParameter(p,'LoadOnly',    'false',@islogical);  %assumes we want to preprocess the data  
   addParameter(p,'NoISCheck',   'false',@islogical);  %assumes we want to check any input structures 
   addParameter(p,'Python',      'false',@islogical);  %assumes we aren't calling this from Python
@@ -303,7 +309,7 @@ try
   %so, to override NXT, we simply copy dXT to NXT and multiply by -1
   if ~isnan(Input.dXT);  Input.NXT = -Input.dXT;end
   Input = rmfield(Input,'dXT');
-  
+
   %special case: dAT overrides NAT (same logic)
   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
   
@@ -319,11 +325,11 @@ try
   Input = rmfield(Input,'FullDataDir');
   
   
-catch ERR
-  ErrorInfo = getReport( ERR, 'extended', 'hyperlinks', 'on' );
-  Error = 1;
-  return
-end
+% catch ERR
+%   ErrorInfo = getReport( ERR, 'extended', 'hyperlinks', 'on' );
+%   Error = 1;
+%   return
+% end
   
 
 
@@ -336,7 +342,13 @@ end
 if numel(fieldnames(Input.InputStruct)) == 0;
   
   %no struct supplied - get the data
-  [Err,Airs,FilePath] = get_airs_granule(Input.RelDataDir,Input.DateNum,Input.GranuleId);
+  if ~isfield(Input,'IASI') | strcmp(Input.IASI,'false') | Input.IASI == 0;
+    %get the AIRS data
+    [Err,Airs,FilePath] = get_airs_granule(Input.RelDataDir,Input.DateNum,Input.GranuleId);
+  elseif Input.IASI == 1;
+    %get the IASI data
+    [Err,Airs,FilePath] = get_iasi_granule(Input.RelDataDir,Input.DateNum,Input.GranuleId);
+  end
   
   if Err ~= 0;
     Error = 1;
@@ -395,18 +407,18 @@ if nansum(Airs.ret_z,'all') == 0; Airs.ret_z = [0,3,6,9,12,15,18,21,24,27,30,33,
 %% regularise the data in the horizontal
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-try
+% try
   %flip the temp array around into the order XT x AT x z
   Airs.ret_temp = permute(Airs.ret_temp,[2,3,1]);
   
   %regularise and find spacing
   [Airs,Spacing] = regularise_airs(Airs,[Input.NXT,Input.NAT],Input.Interpolant,Input.Extrapolant);
 
-catch
-  Error = 1;
-  ErrorInfo = 'Problem regularising data';
-  return
-end
+% catch
+%   Error = 1;
+%   ErrorInfo = 'Problem regularising data';
+%   return
+% end
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% interpolate the data to a regular vertical grid?
@@ -574,7 +586,7 @@ function [Tp,BG] = airs_4dp_detrend(T,Dim,Method)
   %  Dim - dimension to apply the filter in
   %  Method - 1 for slow standard method, 2 for stripped-down fast method (default 2)
   %
-  % in tests, I see literally no difference at all betwene the results of 1
+  % in tests, I see literally no difference at all between the results of 1
   % and 2, but 1 is retained just in case this is wrong...
   %
   %outputs:
@@ -637,119 +649,109 @@ function [Tp,BG] = airs_4dp_detrend(T,Dim,Method)
 return
 
 
-
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% regularise_airs
+%completely rewritten 2025/11/23
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
+function  [Airs,Spacing] = regularise_airs(Airs,Spacing,Interpolant,Extrapolant)
 
-% put AIRS on a regular distance grid, same size as input.
-% expect t to be XTxAT or XTxATxZ
+  %rename vars to save typing
+  Lon   = Airs.l1_lon;
+  Lat   = Airs.l1_lat;
+  Time  = Airs.l1_time;
+  T     = Airs.ret_temp;
 
+  %set up a new grid in distance space
+  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-function  [Airs,Spacing] = regularise_airs(Airs,Spacing,Interpolant,Extrapolant);
+  %define our maths based on the middle row
+  BasisRow = round(size(T,1)/2);
 
+  %work out the distance of each XT column from the basis column (all rows are the same)
+  dXT = distance(Lat(BasisRow,1),Lon(BasisRow,1),  ...
+                 Lat(       :,1),Lon(       :,1));
+  dXT(1:BasisRow) = -dXT(1:BasisRow);
+  dXT = deg2km(dXT);
 
-%rename vars to save typing
-Lon  = Airs.l1_lon;
-Lat  = Airs.l1_lat;
-Time = Airs.l1_time;
-T    = Airs.ret_temp;
+  %work out along-track distances and local heading between adjacent points
+  [segAT,segTh] = distance(Lat(BasisRow,1:end-1),Lon(BasisRow,1:end-1), ...
+                           Lat(BasisRow,2:end  ),Lon(BasisRow,2:end  ));
+  segAT = deg2km(segAT);
 
-%find granule size. use mean of all rows/cols, as there are slight variations between them
-AlongTrackSize  = min(nph_haversine([Airs.l1_lat(:,  1), Airs.l1_lon(  :,1)], ...
-                                    [Airs.l1_lat(:,end), Airs.l1_lon(:,end)]));
-AcrossTrackSize = min(nph_haversine([Airs.l1_lat(1,  :)',Airs.l1_lon(  1,:)'], ...
-                                    [Airs.l1_lat(end,:)',Airs.l1_lon(end,:)']));
+  %define a cumulative along-track distance from the first point
+  dAT  = [0, cumsum(segAT)];
+  %define a heading at each along-track point
+  ThAT = [segTh(1), segTh];
 
-
-%define a new grid relative to granule bottom left
-dXT = Spacing(1);
-dAT = Spacing(2);
-
-
-
-if dXT > 0; 
-  NewXT = linspace(0,AcrossTrackSize,dXT);
-else
-  NewXT = 0:abs(dXT):AcrossTrackSize;
-end
-
-if dAT > 0; 
-  NewAT = linspace(0,AlongTrackSize,dAT);
-else
-  NewAT = 0:abs(dAT):AlongTrackSize;
-end
-
-[lonout,latout,ti, ...
- a,b,timeout]           = put_airs_on_regular_grid(Lon,Lat,Time,T, ...
-                                                   mean(diff(NewXT(:))),mean(diff(NewAT(:))), ...
-                                                   Interpolant,Extrapolant);
+  %hence, create a new grid in distance space
+  if Spacing(1) < 0; NewXT = min(dXT):abs(Spacing(1)):max(dXT);
+  else               NewXT = linspace(min(dXT),max(dXT),Spacing(1));
+  end
+  if Spacing(2) < 0; NewAT =  min(dAT):abs(Spacing(2)):max(dAT);
+  else               NewAT =  linspace(min(dAT),max(dAT),Spacing(2));
+  end
+  [NewXT,NewAT] = ndgrid(NewXT,NewAT);
 
 
-%overwrite the variables, and return
-Airs.l1_lon    = lonout;
-Airs.l1_lat    = latout;
-Airs.l1_time   = timeout;
-Airs.ret_temp  = ti;
-Spacing        = [a,b];
+  %for each new point, work out the new latitude and longitude
+  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+  %interpolate central-track lat/lon and heading onto the NewAT grid
+  ThNew  = interp1(dAT,ThAT,NewAT(1,:),'linear','extrap');
+  LatMid = interp1(dAT,Lat(BasisRow,:),NewAT(1,:),'linear','extrap');
+  LonMid = interp1(dAT,Lon(BasisRow,:),NewAT(1,:),'linear','extrap');
+
+  %expand to 2-D
+  LatMid = repmat(LatMid,size(NewXT,1),1);
+  LonMid = repmat(LonMid,size(NewXT,1),1);
+  AzXT   = repmat(ThNew+90,size(NewXT,1),1);
+
+  %step cross-track from the local track direction
+  [NewLat,NewLon] = reckon(LatMid,LonMid,km2deg(NewXT),AzXT);
+
+  %interpolation (in cartesian space, not lat/lon, to avoid hull problems)
+  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+  NewVar  = NaN([size(NewLat),size(T,3)]);
+  NewTime = NaN(size(NewLat));
+
+  %distance-space coordinates for original grid
+  x_in = dXT(:)';   % 1 x NXT
+  y_in = dAT;       % 1 x NAT
+
+  %distance-space coordinates for new grid (1-D vectors)
+  x_out = NewXT(:,1);   % NXT_new x 1
+  y_out = NewAT(1,:);   % 1 x NAT_new
+
+  %interpolate each level of T
+  for iLev = 1:size(T,3)
+
+    %set up the interpolant on the regular distance grid
+    F = griddedInterpolant({x_in,y_in},T(:,:,iLev),Interpolant,Extrapolant);
+
+    %do the interpolation on the regular distance grid
+    NewVar(:,:,iLev) = F({x_out,y_out});
+
+  end
+
+  %interpolate time field
+  Ftime   = griddedInterpolant({x_in,y_in},Time,Interpolant,Extrapolant);
+  NewTime = Ftime({x_out,y_out});
+
+  %overwrite the variables, and return
+  Airs.l1_lon   = NewLon;
+  Airs.l1_lat   = NewLat;
+  Airs.l1_time  = NewTime;
+  Airs.ret_temp = NewVar;
+
+  %actual spacing in km (distance space)
+  if numel(x_out) > 1; dx = abs(x_out(2)-x_out(1)); else; dx = NaN; end
+  if numel(y_out) > 1; dy = abs(y_out(2)-y_out(1)); else; dy = NaN; end
+  Spacing = [dx,dy];
 
 
 return
-
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% lightly-modified form of Neil's function to do this
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-function varargout = put_airs_on_regular_grid(lon,lat,time,t,dXT,dAT,Interpolant,Extrapolant)
-
-xt_mid = ceil(size(t,1)/2);
-
-% first get ALONG TRACK spacing and azimuth:
-[~,az_at] = distance(lat(xt_mid,1:end-1),lon(xt_mid,1:end-1),lat(xt_mid,2:end),lon(xt_mid,2:end));
-az_at(end+1) = az_at(end);
-% d_at(end+1) = d_at(end);
-at_spacing = dAT;%mean(deg2km(d_at));
-d_at = 0:at_spacing:(at_spacing*(size(t,2)-1));
-
-% now get CROSS TRACK spacing:
-[d_xt,~] = distance(repmat(lat(xt_mid,:),size(t,1),1),repmat(lon(xt_mid,:),size(t,1),1),lat,lon);
-d_xt = deg2km(mean(d_xt,2))';
-d_xt(1:(xt_mid-1)) = -d_xt(1:(xt_mid-1));
-
-% define new grid you want:
-xt_vec = linspace(min(d_xt),max(d_xt),size(t,1));
-at_vec = d_at;
-[XT,~] = ndgrid(xt_vec,at_vec);
-xt_spacing = dXT;%mean(diff(xt_vec));
-
-% use reckon to find new lats and lons:
-[latout,lonout] = reckon(repmat(lat(xt_mid,:),size(t,1),1),repmat(lon(xt_mid,:),size(t,1),1), ...
-                         km2deg(XT), ...
-                         repmat(az_at+90,size(t,1),1));
-
-% interp each level:
-ti = nan(size(t));
-for z = 1:size(t,3)
-    F = griddedInterpolant({d_xt,d_at},t(:,:,z),Interpolant,Extrapolant);
-    ti(:,:,z) = F({xt_vec,at_vec});
-end
-
-%and time
-F = griddedInterpolant({d_xt,d_at},time,Interpolant,Extrapolant);
-timeout = F({xt_vec,at_vec});
-
-% send to outputs:
-varargout{1} = lonout;
-varargout{2} = latout;
-varargout{3} = ti;
-varargout{4} = xt_spacing;
-varargout{5} = at_spacing;
-varargout{6} = timeout;
-
-return
-
 
 
 
@@ -853,6 +855,110 @@ return
 
 
 
+
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% get_iasi_granule
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+function [Error,Iasi,FilePath] = get_iasi_granule(DataDir,DateNum,GranuleId)
+
+  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+  %load IASI format data
+  %it's stored as orbits, but we'll remap to pseudogranules to let
+  %us use the rest of the code
+  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+  %get a list of all the files in the day +-1
+  Files = {};
+  for iDay=-1:1:1;
+    [y,m,d] = datevec(DateNum(1)+iDay); dn = date2doy(DateNum(1)+iDay);
+    F = wildcardsearch([DataDir,'/',sprintf('%04d',y),'/',sprintf('%03d',dn),'/'], ...
+                       ['iasi_',sprintf('%04d',y),sprintf('%02d',m),sprintf('%02d',d),'*']);
+    Files = cat(1,Files,F);
+  end
+
+  %now, for each file, parse the start time
+  StartTimes = NaN(numel(Files),2);
+  for iFile=1:1:numel(Files)
+    File = Files{iFile}; TimeString = File(end-16:end-3);
+    StartTimes(iFile,1) = floor(datenum(TimeString,'yyyymmddhhMMss'));
+    StartTimes(iFile,2) = datenum(TimeString,'yyyymmddhhMMss')-StartTimes(iFile,1);
+  end
+
+
+  %hence, for each "granule", identify the file it lives in
+  GranuleFile = {};
+  for iG=1:1:numel(GranuleId)
+    StartDiff = (GranuleId(iG)./240)-StartTimes(:,2);
+    
+    idx = find(StartDiff > 0 & StartTimes(:,1) == DateNum(iG)); idx = max(idx);
+    Yesterday = Files(find(StartTimes(:,1) < DateNum(iG)));
+    Tomorrow  = Files(find(StartTimes(:,1) > DateNum(iG)));
+
+
+    if numel(idx) == 0 & GranuleId(iG) > 200;
+      %it must be the first one of the next day
+      GranuleFile{end+1} = Tomorrow{1};   
+    elseif numel(idx) == 0 
+      %it must be the last one of the previous day
+      GranuleFile{end+1} = Yesterday{end};
+    elseif numel(idx) == 1; 
+      %we've got it - store the relevant file
+      GranuleFile{end+1} = Files{idx};
+    else
+      %oh dear
+      stop
+    end
+  end
+  Files = unique(GranuleFile);
+
+  %load up all the IASI granules
+  %we need to get the day before and after as well as the orbit splits don't match days
+    for iFile=1:1:numel(Files)
+
+      %load the file
+      Iasi = rCDF(Files{iFile});
+
+      %rejiggle as needed
+      Iasi.ret_temp = permute(Iasi.ret_temp,[2,1,3]);
+
+      %store
+      if ~exist('Store','var'); Store = Iasi;
+      else;                     Store = cat_struct(Store,Iasi,2,{'ret_z'});
+      end
+      clear Iasi
+    end
+
+  %now, work out a time-of-day in minutes and divide into pseudogranules
+  MatlabDate = datenum(2000,1,1,0,0,Store.l1_time(1,:));
+  [~,~,~,h,m,~] = datevec(MatlabDate);
+  m = h*60+m;
+  g = ceil(m./6);
+
+  %and hence pull out the "granules" we want and keep them
+  idx = [];
+  for iG=1:1:numel(GranuleId); idx = [idx,find(g == GranuleId(iG) & floor(MatlabDate) == DateNum(1))]; end
+  Iasi = reduce_struct(Store,idx,{'ret_z','MetaData'},2);
+
+  %finally, reformat to match AIRS formatting
+  Iasi.ret_temp = permute(Iasi.ret_temp,[3,1,2]);
+
+  %sometimes IASI just has bad data. Remove extreme outliers at each height
+  Bad = isoutlier(Iasi.ret_temp,'quartiles',3); Iasi.ret_temp(Bad) = NaN;
+
+  %IASI data is riddled with NaNs, and we've just added to the problem. Interpolate over them, but flag to the user if they are more than 10%
+  if sum(isnan(Iasi.ret_temp)) > 0.1*numel(Iasi.ret_temp); disp('Warning, interpolating over >10% NaNs in this granule'); end
+  Iasi.ret_temp = fillmissing(Iasi.ret_temp,'pchip',3); %use the previous-along-track value
+
+  %and we're done
+  [y,m,d] = datevec(DateNum(1)); dn = date2doy(DateNum(1));
+  FilePath = [DataDir,'/',sprintf('%04d',y),'/',sprintf('%03d',dn),'/'];
+  Error = 0;
+
+return
 
 
 
