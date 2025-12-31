@@ -224,6 +224,7 @@ Spacing = [NaN,NaN,NaN];
   addParameter(p,'NoISCheck',   'false',@islogical);  %assumes we want to check any input structures 
   addParameter(p,'Python',      'false',@islogical);  %assumes we aren't calling this from Python
   
+  
   %do we want to interpolate to a constant vertical scale?
   %this will be from the middle of the scale outwards, as AIRS
   %resolution is best there
@@ -250,6 +251,13 @@ Spacing = [NaN,NaN,NaN];
   %DetrendMethod must be either 1 or 2
   CheckDetrendMethod = @(x) validateattributes(x,{'numeric'},{'>=',1,'<=',2});
   addParameter(p,'DetrendMethod',2,CheckDetrendMethod);  %assumes fast method   
+
+  %fire off a wearning for the user if IASI data exceeds this percentage
+  %threshold, which is also kicked out as MinorErrorInfo text for automated use
+  CheckFrac = @(x) validateattributes(x,{'numeric'},{'nonnegative'},{"<1"});
+  addParameter(p,'IasiFracBad',      0.05,CheckFrac);  %less than 5% of the total data is NaNs
+  addParameter(p,'IasiRegionFracBad',0.03,CheckFrac);  %less than 3% of data is in the largest single connected NaN region
+
 
   %do we have the right day?
   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%  
@@ -345,8 +353,9 @@ if numel(fieldnames(Input.InputStruct)) == 0;
     %get the AIRS data
     [Err,Airs,FilePath] = get_airs_granule(Input.RelDataDir,Input.DateNum,Input.GranuleId);
   elseif Input.IASI == 1;
+
     %get the IASI data
-    [Err,Airs,FilePath] = get_iasi_granule(Input.RelDataDir,Input.DateNum,Input.GranuleId);
+    [Err,Airs,FilePath,MinorErrorInfo] = get_iasi_granule(Input.RelDataDir,Input.DateNum,Input.GranuleId,MinorErrorInfo,[Input.IasiFracBad,Input.IasiRegionFracBad]);
   end
   
   if Err ~= 0;
@@ -463,7 +472,6 @@ else
 end
 
 
-
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% detrend the data
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -488,9 +496,6 @@ catch
   ErrorInfo = 'Problem detrending data';
   return
 end
-
-
-
 
 
 
@@ -528,6 +533,8 @@ if Input.Python == 1
   Airs = rmfield(Airs,'MetaData'); 
   Airs = rmfield(Airs,'Source');
 end
+
+
 
 return
 
@@ -862,7 +869,7 @@ return
 %% get_iasi_granule
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-function [Error,Iasi,FilePath] = get_iasi_granule(DataDir,DateNum,GranuleId)
+function [Error,Iasi,FilePath,MinorErrorInfo] = get_iasi_granule(DataDir,DateNum,GranuleId,MinorErrorInfo,IasiNaNCuts)
 
   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
   %load IASI format data
@@ -957,10 +964,25 @@ function [Error,Iasi,FilePath] = get_iasi_granule(DataDir,DateNum,GranuleId)
 
   %sometimes IASI just has bad data. Remove extreme outliers at each height
   Bad = isoutlier(Iasi.ret_temp,'quartiles',3); Iasi.ret_temp(Bad) = NaN;
+  Bad = find(Iasi.ret_temp < 100 | Iasi.ret_temp > 400); Iasi.ret_temp(Bad) = NaN;
 
-  %IASI data is riddled with NaNs, and we've just added to the problem. Interpolate over them, but flag to the user if they are more than 10%
-  if sum(isnan(Iasi.ret_temp)) > 0.1*numel(Iasi.ret_temp); disp('Warning, interpolating over >10% NaNs in this granule'); end
-  Iasi.ret_temp = fillmissing(Iasi.ret_temp,'pchip',3); %use the previous-along-track value
+  %IASI data is riddled with bad data, and we've just added to the problem.
+  %Interpolate over them, but flag to the user if they are more than 3%
+  %total...
+  if sum(isnan(Iasi.ret_temp),'all') > IasiNaNCuts(1)*numel(Iasi.ret_temp); 
+    disp(['Warning, interpolating over a total number of bad points >',num2str(IasiNaNCuts(1)*100),'% of this IASI granule']);
+    MinorErrorInfo{end+1} = ['Warning, interpolated over a total number of bad points >',num2str(IasiNaNCuts(1)*100),'% of the data of this IASI granule'];
+  end
+
+  %... or the largest connected region is too big
+  CC = bwconncomp(isnan(Iasi.ret_temp), 18);    % requires Image Processing Toolbox
+  if max(cellfun(@numel, CC.PixelIdxList)) > IasiNaNCuts(2)*numel(Iasi.ret_temp); 
+    disp(['Warning, interpolating over a single region of bad points >',num2str(IasiNaNCuts(2)*100),'% of this IASI granule']);
+    MinorErrorInfo{end+1} = ['Warning, interpolated over a single region of bad points >',num2str(IasiNaNCuts(2)*100),'% of the data of this IASI granule'];
+  end
+
+  %ok, do the interpolation
+  Iasi.ret_temp = fillmissing(Iasi.ret_temp,'nearest',3); %use the nearest along-track value
 
   %and we're done
   [y,m,d] = datevec(DateNum(1)); dn = date2doy(DateNum(1));
@@ -1337,12 +1359,6 @@ return
 
 
 
-
-
-
-
-
-
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% smoothn
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -1481,6 +1497,8 @@ end
 b = a(idx{:});
 
 return
+
+
 
 
 

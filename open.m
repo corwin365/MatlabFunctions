@@ -63,7 +63,7 @@ if isvarname(name) && evalin('caller', "exist('" + name + "', 'var')")
 else
     % special handling for netCDF files
     [~,~,x] = fileparts(name);
-    if strcmpi(x,'.nc')
+    if strcmpi(x,'.nc') | strcmpi(x,'.nc4')
         data = rCDF(name);
         % always write to variable 'netCDF' in caller workspace
         assignin('caller','netCDF',data);
