@@ -4,8 +4,10 @@ function LocalDataDir = LocalDataDir()
 [~,TheComputerThisIsOn] = system('hostname');
 TheComputerThisIsOn = upper(char(strtrim(TheComputerThisIsOn)));
 
-%identify the user as wll, for some systems
-TheUser = char(java.lang.System.getProperty('user.name'));
+%identify the user as well, for some systems
+if ispc;TheUser = getenv('USERNAME');
+else;   TheUser = getenv('USER');
+end
 
 
 %set data directory path
@@ -18,7 +20,7 @@ elseif isunix
   elseif strcmp(TheUser,'nh351'); LocalDataDir = '/u/f/nh351/Data/';  %Neil on Bath system    
   else
     warning('Unix system for whom LocalDataDir is not configured, guessing path')
-    LocalDataDir = '/';    
+    LocalDataDir = '/';    %this is a guess
   end
 else
   warning('Non-unix system for whom LocalDataDir is not configured, guessing path')

@@ -105,7 +105,7 @@ end
 
 %create storage arrays
 FitData = struct();
-Fields  = {'walt','wlat','wtim','walt_diff','wlat_diff','wlat_tim'};
+Fields  = {'walt','wlat','wtim','walt_diff','wlat_diff','wtim_diff'};
 for iF=1:1:numel(Fields); FitData.(Fields{iF}) = NaN(numel(Settings.ZScale), numel(Settings.LatScale),numel(Settings.TimeScale)); end
 Fields  = {'A','B','C'};
 for iF=1:1:numel(Fields); FitData.(Fields{iF}) = NaN(numel(Settings.ZScale), numel(Settings.LatScale),numel(Settings.TimeScale),numel(Settings.PWModes)); end
@@ -145,56 +145,68 @@ for iTime=1:1:numel(Settings.TimeScale)
     %determine relative weights of each lat point
     w_lat = exp(- ((Working.Lat - Settings.LatScale(iLat)).^2) ./ (2 * Settings.Std(1)^2));
 
+
+    %identify profiles which can possibly contribute to the result
+    Keep = any(w_lat > Settings.MinContrib,2);
+    if ~any(Keep); continue; end
+
+    %only work with these profiles from here on (implemented on next line
+    Local = reduce_struct(Working,Keep,{},1);
+
+    %combine lat and time here, to save time recomputing every time we
+    %pass through the inner loop    
+    w_tl  = w_tim(Keep,:).*w_lat(Keep,:);
+
+
     %loop over altitude
     %%%%%%%%%%%%%%%%%%%%
     for iZ=1:1:numel(Settings.ZScale)
 
       %check if we have predetermined z weightings, and use these if they exist
       %otherwise, compute new weights
-      if exist('ZWeights','var'); w_alt = repmat(ZWeights{iZ},size(Working.Alt,1),1);
-      else;                       w_alt = exp(- ((Working.Alt - Settings.ZScale(iZ)).^2) ./ (2 * Settings.Std(2)^2));
+      if exist('ZWeights','var'); w_alt = repmat(ZWeights{iZ},size(Local.Alt,1),1);
+      else;                       w_alt = exp(- ((Local.Alt - Settings.ZScale(iZ)).^2) ./ (2 * Settings.Std(2)^2));
       end
 
       %combine the weightings
-      w  = w_tim .* w_lat .*w_alt;
+      w   = w_tl .* w_alt;
       idx = find(w > Settings.MinContrib);
 
       %time to do the weighted fit
       %%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-      
+
       %do we have enough points to do the fit?
-      T = Working.Temp(idx); T = T(~isnan(T));
-      if numel(T) < Settings.MinPoints; clear w idx T w_alt; continue; end
+      T = Local.Temp(idx); T = T(~isnan(T));
+      if numel(T) < Settings.MinPoints; continue; end
 
       %we do! Do it. Turn warnings off, they're going to happen often but we're going to handle them here.
       warning off
-      
-      [~,F] = nph_sinefit(Working.Lon(idx),Working.Temp(idx),(360./Settings.PWModes),'weights',w(idx));
+
+      [~,F] = nph_sinefit(Local.Lon(idx),Local.Temp(idx),(360./Settings.PWModes),'weights',w(idx));
       %if the fit had too few points, then throw it away
       if any(regexp(lastwarn,'Matrix is close to singular or badly scaled.')); F = NaN(length(Settings.PWModes),3); end
       lastwarn('warning_reset')
       warning on
 
       %store the results
-      FitData.A(iZ,iLat,iTime,:) = F(:,1); 
-      FitData.B(iZ,iLat,iTime,:) = F(:,2); 
-      FitData.C(iZ,iLat,iTime,:) = F(:,3); 
+      FitData.A(iZ,iLat,iTime,:) = F(:,1);
+      FitData.B(iZ,iLat,iTime,:) = F(:,2);
+      FitData.C(iZ,iLat,iTime,:) = F(:,3);
 
       %store the weighted mean locations...
-      FitData.wlat(iZ,iLat,iTime) = wmean(Working.Lat( idx),w(idx));
-      FitData.walt(iZ,iLat,iTime) = wmean(Working.Alt( idx),w(idx));
-      FitData.wtim(iZ,iLat,iTime) = wmean(Working.Time(idx),w(idx));
+      FitData.wlat(iZ,iLat,iTime) = wmean(Local.Lat(idx),w(idx));
+      FitData.walt(iZ,iLat,iTime) = wmean(Local.Alt(idx),w(idx));
+      FitData.wtim(iZ,iLat,iTime) = wmean(Local.Time(idx),w(idx));
 
       %... and their deviations from bin centre
       FitData.wlat_diff(iZ,iLat,iTime) = Settings.LatScale(  iLat) - FitData.wlat(iZ,iLat,iTime);
       FitData.walt_diff(iZ,iLat,iTime) = Settings.ZScale(      iZ) - FitData.walt(iZ,iLat,iTime);
-      FitData.wtim_diff(iZ,iLat,iTime) = Settings.TimeScale(iTime) - FitData.wtim(iZ,iLat,iTime);    
+      FitData.wtim_diff(iZ,iLat,iTime) = Settings.TimeScale(iTime) - FitData.wtim(iZ,iLat,iTime);
 
-
-      clear w idx T F w_alt
     end; clear iZ
   end; clear iLat w_lat   
-end; clear iTime InTimeRange Working w_tim ZWeights
+end; clear iTime InTimeRange Working w_tim ZWeights Keep
+clear w idx T w_alt; 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% now we need to interpolate back to the original grid
@@ -259,17 +271,22 @@ for iTime=1:1:numel(Settings.TimeScale)-1
   %this is vile.
   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-  Samples.walt = interp1(linspace(avg_walt(1),avg_walt(end),numel(avg_walt)), ...
-                         1:1:numel(avg_walt), ...
-                         Data.Alt(idx,:));
+  % Samples.walt = interp1(linspace(avg_walt(1),avg_walt(end),numel(avg_walt)), ...
+  %                        1:1:numel(avg_walt), ...
+  %                        Data.Alt(idx,:));
+  % 
+  % Samples.wlat = interp1(linspace(avg_wlat(1),avg_wlat(end),numel(avg_wlat)), ...
+  %                        1:1:numel(avg_wlat), ...
+  %                        Data.Lat(idx,:));
+  % 
+  % Samples.wtim = interp1(linspace(avg_wtim(1),avg_wtim(end),numel(avg_wtim)), ...
+  %                        1:1:numel(avg_wtim), ...
+  %                        Data.Time(idx,:));  
+  
+  Samples.walt = interp1(avg_walt, 1:numel(avg_walt), Data.Alt(idx,:));
+  Samples.wlat = interp1(avg_wlat, 1:numel(avg_wlat), Data.Lat(idx,:));
+  Samples.wtim = interp1(avg_wtim, 1:numel(avg_wtim), Data.Time(idx,:));
 
-  Samples.wlat = interp1(linspace(avg_wlat(1),avg_wlat(end),numel(avg_wlat)), ...
-                         1:1:numel(avg_wlat), ...
-                         Data.Lat(idx,:));
-
-  Samples.wtim = interp1(linspace(avg_wtim(1),avg_wtim(end),numel(avg_wtim)), ...
-                         1:1:numel(avg_wtim), ...
-                         Data.Time(idx,:));  
 
   %and hence reconstruct the PWs
   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%

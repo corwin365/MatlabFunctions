@@ -353,7 +353,6 @@ if numel(fieldnames(Input.InputStruct)) == 0;
     %get the AIRS data
     [Err,Airs,FilePath] = get_airs_granule(Input.RelDataDir,Input.DateNum,Input.GranuleId);
   elseif Input.IASI == 1;
-
     %get the IASI data
     [Err,Airs,FilePath,MinorErrorInfo] = get_iasi_granule(Input.RelDataDir,Input.DateNum,Input.GranuleId,MinorErrorInfo,[Input.IasiFracBad,Input.IasiRegionFracBad]);
   end
@@ -923,20 +922,20 @@ function [Error,Iasi,FilePath,MinorErrorInfo] = get_iasi_granule(DataDir,DateNum
 
   %load up all the IASI granules
   %we need to get the day before and after as well as the orbit splits don't match days
-    for iFile=1:1:numel(Files)
+  for iFile=1:1:numel(Files)
 
-      %load the file
-      Iasi = rCDF(Files{iFile});
+    %load the file
+    Iasi = rCDF(Files{iFile});
 
-      %rejiggle as needed
-      Iasi.ret_temp = permute(Iasi.ret_temp,[2,1,3]);
+    %rejiggle as needed
+    Iasi.ret_temp = permute(Iasi.ret_temp,[2,1,3]);
 
-      %store
-      if ~exist('Store','var'); Store = Iasi;
-      else;                     Store = cat_struct(Store,Iasi,2,{'ret_z','MetaData'});
-      end
-      clear Iasi
+    %store
+    if ~exist('Store','var'); Store = Iasi;
+    else;                     Store = cat_struct(Store,Iasi,2,{'ret_z','MetaData'});
     end
+    clear Iasi
+  end
 
   %now, work out a time-of-day in minutes and divide into pseudogranules
   MatlabDate = datenum(2000,1,1,0,0,Store.l1_time(1,:));
