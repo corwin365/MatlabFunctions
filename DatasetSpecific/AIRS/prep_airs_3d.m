@@ -254,7 +254,7 @@ Spacing = [NaN,NaN,NaN];
 
   %fire off a wearning for the user if IASI data exceeds this percentage
   %threshold, which is also kicked out as MinorErrorInfo text for automated use
-  CheckFrac = @(x) validateattributes(x,{'numeric'},{'nonnegative'},{"<1"});
+  CheckFrac = @(x) validateattributes(x,{'numeric'},{'scalar','>=',0,'<=',1});
   addParameter(p,'IasiFracBad',      0.05,CheckFrac);  %less than 5% of the total data is NaNs
   addParameter(p,'IasiRegionFracBad',0.03,CheckFrac);  %less than 3% of data is in the largest single connected NaN region
 
@@ -900,9 +900,10 @@ function [Error,Iasi,FilePath,MinorErrorInfo] = get_iasi_granule(DataDir,DateNum
     StartDiff = (GranuleId(iG)./240)-StartTimes(:,2);
     
     idx = find(StartDiff > 0 & StartTimes(:,1) == DateNum(iG)); idx = max(idx);
-    Yesterday = Files(find(StartTimes(:,1) < DateNum(iG)));
-    Tomorrow  = Files(find(StartTimes(:,1) > DateNum(iG)));
+    Yesterday = Files(find(StartTimes(:,1) < DateNum(iG))); if ~exist("Yesterday",'file'); Error = 2;    Iasi = struct();    FilePath = '';    return; end
+    Tomorrow  = Files(find(StartTimes(:,1) > DateNum(iG))); if ~exist("Tomorrow ",'file'); Error = 2;    Iasi = struct();    FilePath = '';    return; end
 
+    
 
     if numel(idx) == 0 & GranuleId(iG) > 200;
       %it must be the first one of the next day
