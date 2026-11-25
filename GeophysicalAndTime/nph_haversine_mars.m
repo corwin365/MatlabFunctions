@@ -35,6 +35,7 @@ function [km] = nph_haversine_mars(loc1,loc2)
 % % loc2 = [13.95 150];
 % % 
 % % EDIT - made array safe. I think.
+% % 2026/11/25 [Claude] a clipped to [0,1], so nearly antipodal points give half a great circle, not an error
 % % 
 
 %%
@@ -46,6 +47,7 @@ delta_lat = loc2(:,1) - loc1(:,1);        % difference in latitude
 delta_lon = loc2(:,2) - loc1(:,2);        % difference in longitude
 a = sin(delta_lat./2).^2 + cos(loc1(:,1)) .* cos(loc2(:,1)) .* ...
     sin(delta_lon./2).^2;
+a(a > 1) = 1; a(a < 0) = 0;               % rounding can push a just above 1 for nearly antipodal points (NaN kept)
 c = 2 .* atan2(sqrt(a), sqrt(1-a));
 km = R .* c;
 
