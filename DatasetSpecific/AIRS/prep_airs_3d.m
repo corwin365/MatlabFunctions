@@ -537,7 +537,7 @@ end
 
 return
 
-end
+
 
 
 
@@ -900,16 +900,18 @@ function [Error,Iasi,FilePath,MinorErrorInfo] = get_iasi_granule(DataDir,DateNum
     StartDiff = (GranuleId(iG)./240)-StartTimes(:,2);
     
     idx = find(StartDiff > 0 & StartTimes(:,1) == DateNum(iG)); idx = max(idx);
-    Yesterday = Files(find(StartTimes(:,1) < DateNum(iG))); if ~exist("Yesterday",'file'); Error = 2;    Iasi = struct();    FilePath = '';    return; end
-    Tomorrow  = Files(find(StartTimes(:,1) > DateNum(iG))); if ~exist("Tomorrow ",'file'); Error = 2;    Iasi = struct();    FilePath = '';    return; end
+    Yesterday = Files(find(StartTimes(:,1) < DateNum(iG)));
+    Tomorrow  = Files(find(StartTimes(:,1) > DateNum(iG)));
 
     
 
     if numel(idx) == 0 & GranuleId(iG) > 200;
       %it must be the first one of the next day
+      if isempty(Tomorrow);  Error = 2; Iasi = struct(); FilePath = ''; return; end %no file on the next day
       GranuleFile{end+1} = Tomorrow{1};   
     elseif numel(idx) == 0 
       %it must be the last one of the previous day
+      if isempty(Yesterday); Error = 2; Iasi = struct(); FilePath = ''; return; end %no file on the previous day
       GranuleFile{end+1} = Yesterday{end};
     elseif numel(idx) == 1; 
       %we've got it - store the relevant file
