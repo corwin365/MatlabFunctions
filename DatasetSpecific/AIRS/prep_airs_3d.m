@@ -971,7 +971,11 @@ function [Error,Iasi,FilePath,MinorErrorInfo] = get_iasi_granule(DataDir,DateNum
   Iasi.ret_temp = permute(Iasi.ret_temp,[3,1,2]);
 
   %sometimes IASI just has bad data. Remove extreme outliers at each height
-  Bad = isoutlier(Iasi.ret_temp,'quartiles',3); Iasi.ret_temp(Bad) = NaN;
+  %(2026/11/25 [Claude]: was isoutlier(T,'quartiles',3), where 3 is the dimension, i.e. along track at 1.5 IQR,
+  % which removed ~0.7% of normal data at 25-55 km. Now each height across all loaded points, 3 IQR)
+  sz  = size(Iasi.ret_temp);   %[z x XT x AT]
+  Bad = isoutlier(reshape(Iasi.ret_temp,sz(1),[]),'quartiles',2,'ThresholdFactor',3);
+  Iasi.ret_temp(reshape(Bad,sz)) = NaN; clear sz
   Bad = find(Iasi.ret_temp < 100 | Iasi.ret_temp > 400); Iasi.ret_temp(Bad) = NaN;
 
   %IASI data is riddled with bad data, and we've just added to the problem.
