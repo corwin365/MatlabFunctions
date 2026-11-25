@@ -66,7 +66,10 @@ if ~exist('casesensitive','var'); casesensitive = false; end
 if casesensitive; beginstr = ['(?-i)' beginstr]; end
 regexpstr=[beginstr strrep(regexptranslate('wildcard', searchstr), pathsep, [endstr '|' beginstr]) endstr];
 
-% Search
+% Search. regexpdir remembers the root of its first call in a persistent variable (needed while it
+% recurses) that is never reset, so later searches would match against full paths instead of paths
+% relative to their own root: clear it first, so every search starts afresh. [Claude, 2026/11/25]
+clear regexpdir
 result = regexpdir(rootdir, regexpstr, true);
 
 
@@ -76,6 +79,7 @@ end
 %==========================================================================
 % Changelog:
 % 03-09-2007 v1.00 (BCH)  Initial release
+% 25-11-2026 [Claude]     clear regexpdir before each search (its persistent root was never reset)
 %==========================================================================
 
 
