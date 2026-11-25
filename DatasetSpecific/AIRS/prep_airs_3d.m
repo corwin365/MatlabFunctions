@@ -283,7 +283,7 @@ Spacing = [NaN,NaN,NaN];
       if Sign <= 0; DayShift = -ceil(abs(DayShift));
       else;         DayShift = floor(DayShift);
       end
-      DateNum   = DateNum + DayShift;
+      DateNum(iG) = DateNum(iG) + DayShift; %shift only this granule's day (2026/11/25 [Claude]: was every day)
       GranuleId(iG) = mod(GranuleId(iG),240) ;
     end
   end; clear iG
@@ -703,9 +703,13 @@ function  [Airs,Spacing] = regularise_airs(Airs,Spacing,Interpolant,Extrapolant)
   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
   %interpolate central-track lat/lon and heading onto the NewAT grid
-  ThNew  = interp1(dAT,ThAT,NewAT(1,:),'linear','extrap');
+  %longitude and heading are unwrapped first, so a granule crossing the dateline (or a heading
+  %crossing 0/360) is not interpolated across the jump. Exact (multiples of 360 added), and no
+  %change at all where there is no jump. reckon() below returns longitudes in [-180,180].
+  unwrap360 = @(x) x + 360.*cumsum([0, (diff(x) < -180) - (diff(x) > 180)]);
+  ThNew  = interp1(dAT,unwrap360(ThAT),NewAT(1,:),'linear','extrap');
   LatMid = interp1(dAT,Lat(BasisRow,:),NewAT(1,:),'linear','extrap');
-  LonMid = interp1(dAT,Lon(BasisRow,:),NewAT(1,:),'linear','extrap');
+  LonMid = interp1(dAT,unwrap360(Lon(BasisRow,:)),NewAT(1,:),'linear','extrap');
 
   %expand to 2-D
   LatMid = repmat(LatMid,size(NewXT,1),1);
@@ -941,14 +945,16 @@ function [Error,Iasi,FilePath,MinorErrorInfo] = get_iasi_granule(DataDir,DateNum
   end
 
   %now, work out a time-of-day in minutes and divide into pseudogranules
-  MatlabDate = datenum(2000,1,1,0,0,Store.l1_time(1,:));
-  [~,~,~,h,m,~] = datevec(MatlabDate);
-  m = h*60+m;
-  g = ceil(m./6);
+  %pseudogranule k of a day covers [6(k-1), 6k) minutes after 00:00 UTC, using each scan's first time
+  %(2026/11/25 [Claude]: was ceil(whole minutes/6), one minute late and dropping 00:00-00:01).
+  %done in seconds (l1_time is seconds since 2000-01-01T00:00Z, leap seconds ignored as elsewhere) so bin edges are exact
+  Day = datenum(2000,1,1) + floor(Store.l1_time(1,:)./86400);
+  g   = floor(mod(Store.l1_time(1,:),86400)./360) + 1;
 
   %and hence pull out the "granules" we want and keep them
+  %(2026/11/25 [Claude]: each granule is matched to its own day; was DateNum(1) for all)
   idx = [];
-  for iG=1:1:numel(GranuleId); idx = [idx,find(g == GranuleId(iG) & floor(MatlabDate) == DateNum(1))]; end
+  for iG=1:1:numel(GranuleId); idx = [idx,find(g == GranuleId(iG) & Day == DateNum(iG))]; end
   Iasi = reduce_struct(Store,idx,{'ret_z','MetaData'},2);
 
 
