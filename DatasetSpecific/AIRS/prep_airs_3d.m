@@ -42,9 +42,8 @@ function [Airs,Spacing,Error,ErrorInfo,MinorErrorInfo] = prep_airs_3d(DateNum,Gr
 %  MinorErrorInfo: minor error details (cell array of all encountered)
 %
 %Note 1:
-%    for XT and AT, this will always be the mean, and should be reasonably
-%    accurate. For z, it will be the *modal* value if only 2D interpolation
-%    is used, and the mean if 3D interpolation (not yet implemented) is used.
+%    in km, the spacing of the regular grid the data are interpolated to (XT, AT), and
+%    VerticalSpacing for z if VerticallyInterpolate is true (NaN otherwise). [Claude 2026/11/25: was out of date]
 %
 %%%%%%%%%%%
 %inputs:
@@ -69,8 +68,10 @@ function [Airs,Spacing,Error,ErrorInfo,MinorErrorInfo] = prep_airs_3d(DateNum,Gr
 %     case you MUST set this variable unless you use an InputStruct
 %
 % Note 3:
-%     if InputStruct is used, Datenum and Granule are ignored but required
-%     set them to dummy numeric values just to pass the initial check
+%     if InputStruct is used, DateNum and GranuleId are ignored but required:
+%     set them to dummy numeric values (e.g. 0,0). The struct needs ret_temp [levels x XT x AT],
+%     ret_z [levels, km] and l1_time, l1_lat, l1_lon [XT x AT], with l1_time in seconds since
+%     2000-01-01T00:00Z, as in the files. Checked unless NoISCheck is true.
 %
 %
  %optional (all case-insensitive)
@@ -88,11 +89,15 @@ function [Airs,Spacing,Error,ErrorInfo,MinorErrorInfo] = prep_airs_3d(DateNum,Gr
 %    LoadOnly      (logical, false)  load and return data only
 %    IASI          (logical, false)  load IASI data instead
 %    NoISCheck     (logical, false)  don't check the validity of an input structure (useful eg for merged multiple granules where the size is wrong)
-%    Python        (logical, false)  Python can't handle recursive structs - if called from there, then remove the MetaData field
+%    Python        (logical, false)  Python can't handle recursive structs - if called from there, then remove the MetaData field (and Source, FilePath)
 %    NXT           (numeric,    90)  number of cross-track points to interpolate to.
 %    NAT           (numeric,   135)  number of along-track points to interpolate to.
 %    dXT           (numeric,   NaN)  (OVERRIDES NXT) distance between each XT point to interpolate to 
 %    dAT           (numeric,   NaN)  (OVERRIDES NAT) distance between each AT point to interpolate to 
+%    VerticallyInterpolate (logical, true)  interpolate to a regular vertical grid.
+%    VerticalSpacing (numeric,      3)  spacing of that grid, km.
+%    IasiFracBad   (numeric,   0.05)  IASI: warn if more than this fraction of the data are bad and refilled.
+%    IasiRegionFracBad (numeric, 0.03)  IASI: warn if the largest connected bad region exceeds this fraction.
 %
 %
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -113,7 +118,7 @@ function [Airs,Spacing,Error,ErrorInfo,MinorErrorInfo] = prep_airs_3d(DateNum,Gr
 %
 %EXAMPLE TWO:
 %
-% [Airs,Error,EI,MEI] = prep_airs_3d(datenum(2002,1,242),225,'dXT',10,'DayNightFlag',true,'Interpolant','nearest')
+% [Airs,Spacing,Error,EI,MEI] = prep_airs_3d(datenum(2002,1,242),225,'dXT',10,'DayNightFlag',true,'Interpolant','nearest')
 %
 %will:
 %  - load the AIRS data for granule 225 on day 242 of 2002
@@ -127,7 +132,7 @@ function [Airs,Spacing,Error,ErrorInfo,MinorErrorInfo] = prep_airs_3d(DateNum,Gr
 %
 %EXAMPLE THREE:
 %
-% [Airs,Error,EI,MEI]  = prep_airs_3d(0,0,'InputStruct',AirsIn,'NoDetrend',true)
+% [Airs,Spacing,Error,EI,MEI]  = prep_airs_3d(0,0,'InputStruct',AirsIn,'NoDetrend',true)
 %
 %will:
 %  - use data from the input structure AirsIn, ignoring the DateNum/GranuleId inputs
@@ -180,7 +185,8 @@ Spacing = [NaN,NaN,NaN];
   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
   %first, check if we have a LocalDataDir function
-  if exist(LocalDataDir,'file') == 7;
+  %(2026/11/25 [Claude]: was exist(LocalDataDir,'file') == 7, which calls the function, so crashed without one)
+  if exist('LocalDataDir') >= 2 && exist(LocalDataDir,'dir') == 7;
     %we have a function. We can use either DataDir or FullDataDir as optional flags
     if numel(find(strcmp(varargin,'IASI'))) == 1 & varargin{find(strcmp(varargin,'IASI'))+1} == 1 ;  
         addParameter(p,'RelDataDir',[LocalDataDir,'/IASI/'],@ischar); %where IASI data live on my system
@@ -191,7 +197,7 @@ Spacing = [NaN,NaN,NaN];
   else
     %we do not have a function. FullDataDir is now a required variable
     %easiest to do this a bit clunkily. 
-    if sum(ismember(lower(varargin),'fulldatadir')) ~=1;
+    if sum(strcmpi(varargin,'fulldatadir')) ~=1; %(was lower(varargin), which fails on numeric arguments)
       ErrorInfo = 'No LocalDataDir function available and FullDataDir not specified';
       Error = 1;
       return
@@ -216,25 +222,25 @@ Spacing = [NaN,NaN,NaN];
   addParameter(p,'dAT',NaN,CheckdT);  %assume we're using NAT instead by default
 
   %NoDetrend,DayNightFlag, LoadOnly and KeepOldTime must be logical
-  addParameter(p,'NoDetrend',   'false',@islogical);  %assumes we want to detrend
-  addParameter(p,'KeepOldTime', 'false',@islogical);  %assumes we want to discard
-  addParameter(p,'DayNightFlag','false',@islogical);  %assumes we want to not compute
-  addParameter(p,'IASI',        'false',@islogical);  %assumes we want AIRS data
-  addParameter(p,'LoadOnly',    'false',@islogical);  %assumes we want to preprocess the data  
-  addParameter(p,'NoISCheck',   'false',@islogical);  %assumes we want to check any input structures 
-  addParameter(p,'Python',      'false',@islogical);  %assumes we aren't calling this from Python
+  addParameter(p,'NoDetrend',   false,@islogical);  %assumes we want to detrend
+  addParameter(p,'KeepOldTime', false,@islogical);  %assumes we want to discard
+  addParameter(p,'DayNightFlag',false,@islogical);  %assumes we want to not compute
+  addParameter(p,'IASI',        false,@islogical);  %assumes we want AIRS data
+  addParameter(p,'LoadOnly',    false,@islogical);  %assumes we want to preprocess the data  
+  addParameter(p,'NoISCheck',   false,@islogical);  %assumes we want to check any input structures 
+  addParameter(p,'Python',      false,@islogical);  %assumes we aren't calling this from Python
   
   
   %do we want to interpolate to a constant vertical scale?
   %this will be from the middle of the scale outwards, as AIRS
   %resolution is best there
   CheckZI = @(x) validateattributes(x,{'numeric'},{'nonnegative'}); 
-  addParameter(p,'VerticallyInterpolate','true',@islogical);  %assumes we want to 
+  addParameter(p,'VerticallyInterpolate',true,@islogical);  %assumes we want to 
   addParameter(p,'VerticalSpacing',3,CheckZI);                %assume 3km if we do
   
   
   %Interpolant must be a string from the approved list
-  ExpectedInterpolants = {'linear','nearest','natural'};
+  ExpectedInterpolants = {'linear','nearest'}; %'natural' removed 2026/11/25 [Claude]: griddedInterpolant does not support it
   addParameter(p,'Interpolant','linear',@(x) any(validatestring(x,ExpectedInterpolants)));  %assumes linear
   
   %Extrapolant must be a string from the approved list
@@ -271,12 +277,19 @@ Spacing = [NaN,NaN,NaN];
     %no way to match - give up
     Error = 1;
     ErrorInfo = 'Unable to match granule numbers with days - use arrays of the same size';
+    return %(2026/11/25 [Claude]: was missing, so the call carried on)
   end
 
+  %days are whole days (2026/11/25 [Claude]: a fractional DateNum gave a file name that is never found)
+  DateNum = floor(DateNum);
+
+  %with an InputStruct, DateNum and GranuleId are dummies: skip the granule checks below
+  %(2026/11/25 [Claude]: the documented dummy granule 0 was dropped, so InputStruct could not be used)
+  UsingInputStruct = any(strcmpi(varargin,'InputStruct'));
 
   %if granuleId is outside the legit range (-1-240), then add or subtract
   %days as appropriate
-  for iG=1:1:numel(GranuleId)
+  for iG=1:1:numel(GranuleId)*~UsingInputStruct
     if GranuleId(iG) < 1 | GranuleId(iG) > 240;
       DayShift  = GranuleId(iG)./240;
       Sign      = DayShift/abs(DayShift);
@@ -289,7 +302,7 @@ Spacing = [NaN,NaN,NaN];
   end; clear iG
 
   %silently drop any requests for "granule 0" of a specific day that arise from the above logic
-  Good = find(GranuleId ~= 0);
+  Good = find(GranuleId ~= 0 | UsingInputStruct);
   GranuleId = GranuleId(Good);
   DateNum = DateNum(Good);
   clear Good
@@ -529,8 +542,8 @@ end
 
 %if Python, remove MetaData struct
 if Input.Python == 1
-  Airs = rmfield(Airs,'MetaData'); 
-  Airs = rmfield(Airs,'Source');
+  %(2026/11/25 [Claude]: only remove fields that exist; daily AIRS files give no MetaData)
+  for F = {'MetaData','Source','FilePath'}; if isfield(Airs,F{1}); Airs = rmfield(Airs,F{1}); end; end
 end
 
 
@@ -829,7 +842,7 @@ function [Error,Data,FilePath] = get_airs_granule(DataDir,DateNum,GranuleId)
   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
   if sum(FoundList) ~= numel(FoundList)
-    Error = 1
+    Error = 1;
     Data = struct();
     FilePath = '';
     return
@@ -898,32 +911,20 @@ function [Error,Iasi,FilePath,MinorErrorInfo] = get_iasi_granule(DataDir,DateNum
   end
 
 
-  %hence, for each "granule", identify the file it lives in
+  %hence, for each "granule", identify the file(s) it lives in.
+  %(2026/11/25 [Claude]: was only the last file starting before the granule's end, so a granule spanning
+  % a file start lost its earlier part.) Orbit files are back-to-back (next file starts one 8-s scan after
+  % the last ends; checked 67 boundaries, 2007-2016), so file f covers [its start, next file's start).
+  %A granule [6(k-1),6k) minutes of its day needs every file overlapping that interval.
+  Start = StartTimes(:,1) + StartTimes(:,2);
+  [Start,Order] = sort(Start); Files = Files(Order);
+  Finish = [Start(2:end); Inf];
   GranuleFile = {};
   for iG=1:1:numel(GranuleId)
-    StartDiff = (GranuleId(iG)./240)-StartTimes(:,2);
-    
-    idx = find(StartDiff > 0 & StartTimes(:,1) == DateNum(iG)); idx = max(idx);
-    Yesterday = Files(find(StartTimes(:,1) < DateNum(iG)));
-    Tomorrow  = Files(find(StartTimes(:,1) > DateNum(iG)));
-
-    
-
-    if numel(idx) == 0 & GranuleId(iG) > 200;
-      %it must be the first one of the next day
-      if isempty(Tomorrow);  Error = 2; Iasi = struct(); FilePath = ''; return; end %no file on the next day
-      GranuleFile{end+1} = Tomorrow{1};   
-    elseif numel(idx) == 0 
-      %it must be the last one of the previous day
-      if isempty(Yesterday); Error = 2; Iasi = struct(); FilePath = ''; return; end %no file on the previous day
-      GranuleFile{end+1} = Yesterday{end};
-    elseif numel(idx) == 1; 
-      %we've got it - store the relevant file
-      GranuleFile{end+1} = Files{idx};
-    else
-      %oh dear
-      stop
-    end
+    G0 = DateNum(iG) + (GranuleId(iG)-1)./240; G1 = DateNum(iG) + GranuleId(iG)./240;
+    idx = find(Start < G1 & Finish > G0);
+    if numel(idx) == 0; Error = 2; Iasi = struct(); FilePath = ''; return; end %no file covers this granule
+    GranuleFile = [GranuleFile, Files(idx)'];
   end
   Files = unique(GranuleFile);
 
@@ -961,7 +962,7 @@ function [Error,Iasi,FilePath,MinorErrorInfo] = get_iasi_granule(DataDir,DateNum
   %if we failed, give up
   if numel(Iasi.l1_lat) == 0
     Error = 1;
-    Data = struct();
+    Iasi = struct(); %was Data, leaving the output unassigned (2026/11/25 [Claude])
     FilePath = '';
     return
   end
@@ -1032,22 +1033,19 @@ function [Airs,Error,ErrorInfo] = check_input_struct(Input)
     return
   end
   
-  %check the temperature data are formatted correctly
+  %check the arrays are consistent: ret_temp [z x XT x AT], ret_z [z], l1_* [XT x AT]
+  %(2026/11/25 [Claude]: was fixed at 27 levels x 90 cross-track, i.e. AIRS only; ret_z is now required, as the code uses it)
   E = size(Input.InputStruct.ret_temp);
-  if E(1) ~= 27 || E(2) ~= 90;
+  if numel(E) ~= 3 || ~isfield(Input.InputStruct,'ret_z') || numel(Input.InputStruct.ret_z) ~= E(1);
     Error = 1;
-    ErrorInfo = 'Error in ret_temp: should be 27 x 90 x N';
+    ErrorInfo = 'Error in ret_temp/ret_z: ret_temp should be [levels x cross-track x along-track], with ret_z one height per level';
     return
   end
-  
-  %check the lat,lon,time data are formatted correctly
-  %writing it out this longhand looks clunky, but according to the Matlab
-  %style guide provides a (microscopic) speed boost over a shorter command
-  if size(Input.InputStruct.l1_time,1) ~= 90 ...
-  || size(Input.InputStruct.l1_lat ,1) ~= 90 ...
-  || size(Input.InputStruct.l1_lon ,1) ~= 90;  
+  if ~isequal(size(Input.InputStruct.l1_time),E(2:3)) ...
+  || ~isequal(size(Input.InputStruct.l1_lat ),E(2:3)) ...
+  || ~isequal(size(Input.InputStruct.l1_lon ),E(2:3));
     Error = 1;
-    ErrorInfo = 'Error in geolocation arrays - should all be 90 x N';
+    ErrorInfo = sprintf('Error in geolocation arrays - should all be %d x %d (cross-track x along-track), as ret_temp',E(2),E(3));
     return
   end
   
