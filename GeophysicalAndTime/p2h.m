@@ -1,166 +1,50 @@
 function z = p2h(pres)
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%convert pressures to altitudes
-%slightly tidied-up pres2alt_complex() by Neil Hindley, which in turn is based on the
-%wikipedia page for the BAROMETRIC FORMULA
+%convert pressures to altitudes, with the U.S. Standard Atmosphere, 1976 (the inverse of h2p)
 %
 %inputs:
-%   pres - atmospheric pressure values, in hPa (any size of array is fine)
+%   pres - atmospheric pressure, in hPa (any size of array is fine)
 %outputs:
-%   Z - approximate corresponding heights, in km.
+%   z - geometric altitude, in km, same size, double. NaN outside 1777.6 to 4.74e-6 hPa (-5 to 149 km), or for
+%       NaN or non-positive input.
 %
-%Corwin Wright, c.wright@bath.ac.uk, 2023/08/14
+%Up to 86 km: the inverses of the standard's eqs (33a) and (33b) for geopotential height in each layer, then
+%eq (19) for geometric height (constants in ussa76_constants.m). Above 86 km: height linear in log(pressure)
+%between the values of its Table I (p. 68). See h2p for details.
+%
+%Source: U.S. Standard Atmosphere, 1976, NOAA-S/T 76-1562 / NASA-TM-X-74335, Washington, D.C., 1976.
+%Python equivalent: atmosgw.curate.atmosphere.pressure_to_height.
+%
+%Corwin Wright, c.wright@bath.ac.uk, 2023/08/14 (originally a tidied-up pres2alt_complex() by Neil Hindley)
+%
+%change log:
+%  2026/11/25 [Claude] rewritten to implement the standard properly (was: isothermal layers between 7 pressures,
+%                      with geopotential base heights used as geometric; pressures above 1013.25 hPa reused the
+%                      previous element's layer; single input computed in single precision)
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-%rearrange data into a line
-sz = size(pres);
-pres = pres(:);
+S = ussa76_constants();
+p = double(pres);
+z = NaN(size(p));
 
+PBottom = h2p(S.MinAlt);
+PTop86  = S.Pb(end).*(S.Tb(end)./(S.Tb(end) + S.L(end).*(S.Hb(end)-S.Hb(end-1)))).^(S.k./S.L(end));  %at 84.852 km'
 
+%up to 86 km: inverted equations
+Low = isfinite(p) & p > 0 & p <= PBottom & p >= PTop86;
+q = p(Low); q = q(:);
+b = max(sum(q <= S.Pb,2),1);   %layer: highest base whose pressure is >= q
+Pb = S.Pb(b)'; Tb = S.Tb(b)'; L = S.L(b)';
+dH = Tb./L.*((q./Pb).^(-L./S.k) - 1);   %inverse of eq (33a)
+Iso = L == 0;
+dH(Iso) = -Tb(Iso)./S.k.*log(q(Iso)./Pb(Iso));   %inverse of eq (33b)
+H = S.Hb(b)' + dH;
+z(Low) = S.r0.*H./(S.r0 - H);   %eq (19)
 
-z = zeros(size(pres));
-
-
-% These are the levels from the wiki page for the BAROMETRIC FORMULA
-
-
-% define pressure "base" levels:
-
-p0 = 1013.25; % (hPa) (sea level)
-p1 = 226.3210; 
-p2 = 54.7489;
-p3 = 8.6802;
-p4 = 1.1091;
-p5 = 0.6694;
-p6 = 0.0396;
-
-% and their corresponding altitude levels (km)
-
-z0 = 0;
-z1 = 11;
-z2 = 20;
-z3 = 32;
-z4 = 47;
-z5 = 51;
-z6 = 71;
-
-
-% now calculate scale heights...
-
-H0 = - (z1-z0) / (log(p1/p0));
-H1 = - (z2-z1) / (log(p2/p1));
-H2 = - (z3-z2) / (log(p3/p2));
-H3 = - (z4-z3) / (log(p4/p3));
-H4 = - (z5-z4) / (log(p5/p4));
-H5 = - (z6-z5) / (log(p6/p5));
-
-H6 = H5;
-
-
-
-% and now calculate the altitudes from pres2alt.m...
-
-
-
-for i = 1:length(pres),
-
-    p = pres(i);
-    
-    
-    %added by Corwin to make NaNsafe
-    if ~isfinite(p);
-      z(i) = NaN;
-      continue
-    end
-    
-    
-%  %  if p >= p0, % Quick clause to cope with above normal surface pressure.
-%  %              % Instead of saying things are underground, set them to zero
-%  %              % and move on.
-%  %      
-%  %      z(i) = 0;
-%  %      
-%  %      continue
-%  %      
-%  %  end
-    
-    
-    
-if p <= p0 && p > p1, % LAYER 0
-    
-    ref_pres = p0; ref_alt = z0; 
-    
-    H = H0;
+%86 to 149 km: height linear in log(pressure) between Table I values. Pressures between the table's 86 km value
+%and the equations' (1.2e-6 relative apart) are set to 86 km
+High = isfinite(p) & p < PTop86 & p >= S.TableP(end);
+z(High) = interp1(log(S.TableP),S.TableZ,min(log(p(High)),log(S.TableP(1))),'linear');
 
 end
-
-if p <= p1 && p > p2, % LAYER 1
-    
-    ref_pres = p1; ref_alt = z1; 
-    
-    H = H1;
-
-end
-
-if p <= p2 && p > p3, % LAYER 2
-    
-    ref_pres = p2; ref_alt = z2; 
-    
-    H = H2;
-
-end
-
-if p <= p3 && p > p4, % LAYER 3
-    
-    ref_pres = p3; ref_alt = z3; 
-    
-    H = H3;
-
-end
-
-if p <= p4 && p > p5, % LAYER 4
-    
-    ref_pres = p4; ref_alt = z4; 
-    
-    H = H4;
-
-end
-
-if p <= p5 && p > p6, % LAYER 5
-    
-    ref_pres = p5; ref_alt = z5; 
-    
-    H = H5;
-
-end
-
-if p <= p6, % LAYER 6 AND ABOVE
-    
-    ref_pres = p6; ref_alt = z6; 
-    
-    H = H6;
-
-end
-
-
-z(i) = ( -H * log(p/ref_pres) ) + ref_alt;
-
-
-
-end % end cycling through all of pres's element(s)...
-
-
-
-
-%and convert back
-z = reshape(z,sz);
-
-
-
-end 
-
-
-
-
-
