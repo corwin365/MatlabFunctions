@@ -893,10 +893,11 @@ function [Error,Iasi,FilePath,MinorErrorInfo] = get_iasi_granule(DataDir,DateNum
   %us use the rest of the code
   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-  %get a list of all the files in the day +-1
+  %get a list of all the files from the day before the first granule to the day after the last
+  %(2026/11/25 [Claude]: was DateNum(1) +-1 only, so granules of later days found no file)
   Files = {};
-  for iDay=-1:1:1;
-    [y,m,d] = datevec(DateNum(1)+iDay); dn = date2doy(DateNum(1)+iDay);
+  for Day=min(DateNum)-1:1:max(DateNum)+1;
+    [y,m,d] = datevec(Day); dn = date2doy(Day);
     F = wildcardsearch([DataDir,'/',sprintf('%04d',y),'/',sprintf('%03d',dn),'/'], ...
                        ['iasi_',sprintf('%04d',y),sprintf('%02d',m),sprintf('%02d',d),'*']);
     Files = cat(1,Files,F);
@@ -935,6 +936,13 @@ function [Error,Iasi,FilePath,MinorErrorInfo] = get_iasi_granule(DataDir,DateNum
     %load the file
     Iasi = rCDF(Files{iFile});
 
+    %skip files without temperature (e.g. all of 2007-05-29 and 2007-11-08), noting them
+    %(2026/11/25 [Claude]: was an error)
+    if ~isfield(Iasi,'ret_temp')
+      MinorErrorInfo{end+1} = ['IASI file without ret_temp skipped: ',Files{iFile}];
+      clear Iasi; continue
+    end
+
     %rejiggle as needed
     Iasi.ret_temp = permute(Iasi.ret_temp,[2,1,3]);
 
@@ -944,6 +952,7 @@ function [Error,Iasi,FilePath,MinorErrorInfo] = get_iasi_granule(DataDir,DateNum
     end
     clear Iasi
   end
+  if ~exist('Store','var'); Error = 1; Iasi = struct(); FilePath = ''; return; end %no file had temperature
 
   %now, work out a time-of-day in minutes and divide into pseudogranules
   %pseudogranule k of a day covers [6(k-1), 6k) minutes after 00:00 UTC, using each scan's first time
